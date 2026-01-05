@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { DataTable } from "@/components/dashboard/DataTable";
@@ -13,14 +14,33 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 
-// Mock data
-const recentOrders = [
-  { id: "ORD-001", customer: "John Doe", product: "Wireless Mouse", amount: "$45.00", status: "Delivered" },
-  { id: "ORD-002", customer: "Jane Smith", product: "Mechanical Keyboard", amount: "$129.00", status: "Shipped" },
-  { id: "ORD-003", customer: "Bob Wilson", product: "USB-C Hub", amount: "$79.00", status: "Processing" },
-  { id: "ORD-004", customer: "Alice Brown", product: "Monitor Stand", amount: "$59.00", status: "Pending" },
-  { id: "ORD-005", customer: "Charlie Davis", product: "Webcam HD", amount: "$89.00", status: "Delivered" },
-];
+// 1. Define API Interfaces
+interface TopProductAPI {
+  name: string;
+  sales: number;
+  revenue: number;
+}
+
+interface RecentOrder {
+  id: number;
+  customer: string;
+  product: string;
+  amount: number;
+  status: string;
+}
+
+interface DashboardStats {
+  totalRevenue: number;
+  totalOrders: number;
+  totalProducts: number;
+  topProducts: TopProductAPI[];
+  recentOrders: RecentOrder[];
+}
+
+// 2. Define Table Row Interface (Extends API with ID)
+interface TopProductRow extends TopProductAPI {
+  id: string | number;
+}
 
 const salesData = [
   { name: "Jan", value: 4000 },
@@ -32,18 +52,52 @@ const salesData = [
   { name: "Jul", value: 7000 },
 ];
 
-const topProducts = [
-  { id: "1", name: "Wireless Mouse Pro", sales: 234, revenue: "$10,530" },
-  { id: "2", name: "Mechanical Keyboard RGB", sales: 189, revenue: "$24,381" },
-  { id: "3", name: "USB-C Hub 7-in-1", sales: 156, revenue: "$12,324" },
-  { id: "4", name: "4K Webcam", sales: 142, revenue: "$12,638" },
-];
-
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, getToken, API_URL } = useAuth();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const token = getToken();
+        // Ensure this URL matches your Ocelot Upstream path
+        const response = await fetch(`${API_URL}/dashboard`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setStats(data);
+        } else {
+          console.error("Failed to fetch dashboard stats");
+        }
+      } catch (error) {
+        console.error("Error fetching dashboard:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [API_URL, getToken]);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(amount);
+  };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+    const variants: Record<
+      string,
+      "default" | "secondary" | "destructive" | "outline"
+    > = {
+      "Paid & Completed": "default",
       Delivered: "default",
       Shipped: "secondary",
       Processing: "outline",
@@ -51,6 +105,18 @@ export default function Dashboard() {
     };
     return <Badge variant={variants[status] || "outline"}>{status}</Badge>;
   };
+
+  // 3. Prepare data for DataTable (Add IDs)
+  // We use the index as ID because top products are just an aggregated list
+  const tableTopProducts: TopProductRow[] =
+    stats?.topProducts.map((p, i) => ({
+      ...p,
+      id: i, // Synthetic ID to satisfy DataTable requirement
+    })) || [];
+
+  if (loading) {
+    return <div className="p-8">Loading dashboard...</div>;
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -74,31 +140,31 @@ export default function Dashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Total Revenue"
-          value="$45,231.89"
-          change="+20.1% from last month"
+          value={formatCurrency(stats?.totalRevenue || 0)}
+          change="Lifetime"
           changeType="positive"
           icon={DollarSign}
         />
         <MetricCard
           title="Orders"
-          value="2,345"
-          change="+15% from last month"
+          value={stats?.totalOrders.toString() || "0"}
+          change="Total orders processed"
           changeType="positive"
           icon={ShoppingCart}
         />
         <MetricCard
-          title="Active Users"
-          value="12,234"
-          change="+5.2% from last month"
-          changeType="positive"
-          icon={Users}
-        />
-        <MetricCard
           title="Products"
-          value="573"
-          change="23 low stock items"
+          value={stats?.totalProducts.toString() || "0"}
+          change="Available in catalog"
           changeType="neutral"
           icon={Package}
+        />
+        <MetricCard
+          title="Active Users"
+          value="--"
+          change="Analytics pending"
+          changeType="neutral"
+          icon={Users}
         />
       </div>
 
@@ -113,13 +179,23 @@ export default function Dashboard() {
               View All <ArrowUpRight className="h-3 w-3" />
             </Button>
           </div>
+          {/* Passed tableTopProducts which now has IDs */}
           <DataTable
             columns={[
               { header: "Product", accessorKey: "name" },
-              { header: "Sales", accessorKey: "sales", className: "text-right" },
-              { header: "Revenue", accessorKey: "revenue", className: "text-right font-medium" },
+              {
+                header: "Sales",
+                accessorKey: "sales",
+                className: "text-right",
+              },
+              {
+                header: "Revenue",
+                accessorKey: (row: TopProductRow) =>
+                  formatCurrency(row.revenue),
+                className: "text-right font-medium",
+              },
             ]}
-            data={topProducts}
+            data={tableTopProducts}
           />
         </div>
       </div>
@@ -134,17 +210,25 @@ export default function Dashboard() {
         </div>
         <DataTable
           columns={[
-            { header: "Order ID", accessorKey: "id", className: "font-mono text-sm" },
-            { header: "Customer", accessorKey: "customer" },
+            {
+              header: "Order ID",
+              accessorKey: "id",
+              className: "font-mono text-sm",
+            },
+            { header: "Customer ID", accessorKey: "customer" },
             { header: "Product", accessorKey: "product" },
-            { header: "Amount", accessorKey: "amount", className: "text-right font-medium" },
+            {
+              header: "Amount",
+              accessorKey: (row: RecentOrder) => formatCurrency(row.amount),
+              className: "text-right font-medium",
+            },
             {
               header: "Status",
-              accessorKey: (row) => getStatusBadge(row.status),
+              accessorKey: (row: RecentOrder) => getStatusBadge(row.status),
               className: "text-right",
             },
           ]}
-          data={recentOrders}
+          data={stats?.recentOrders || []}
         />
       </div>
     </div>

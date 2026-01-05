@@ -9,7 +9,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Store, ShoppingCart, User, LogOut, Sun, Moon, Package, Menu } from "lucide-react";
+import {
+  Store,
+  ShoppingCart,
+  User,
+  LogOut,
+  Sun,
+  Moon,
+  Package,
+  Menu,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -30,8 +39,7 @@ export function CustomerLayout() {
         className={cn(
           "text-sm font-medium transition-colors hover:text-primary",
           location.pathname === "/" ? "text-primary" : "text-muted-foreground"
-        )}
-      >
+        )}>
         Products
       </Link>
       {user && !isManager && (
@@ -40,18 +48,20 @@ export function CustomerLayout() {
             to="/orders"
             className={cn(
               "text-sm font-medium transition-colors hover:text-primary",
-              location.pathname === "/orders" ? "text-primary" : "text-muted-foreground"
-            )}
-          >
+              location.pathname === "/orders"
+                ? "text-primary"
+                : "text-muted-foreground"
+            )}>
             Orders
           </Link>
           <Link
             to="/cart"
             className={cn(
               "relative text-sm font-medium transition-colors hover:text-primary",
-              location.pathname === "/cart" ? "text-primary" : "text-muted-foreground"
-            )}
-          >
+              location.pathname === "/cart"
+                ? "text-primary"
+                : "text-muted-foreground"
+            )}>
             <ShoppingCart className="h-5 w-5" />
             {cartCount > 0 && (
               <Badge className="absolute -right-2 -top-2 h-4 w-4 rounded-full p-0 text-[10px]">
@@ -64,8 +74,7 @@ export function CustomerLayout() {
       {isManager && (
         <Link
           to="/dashboard"
-          className="text-sm font-medium text-primary hover:text-primary/80"
-        >
+          className="text-sm font-medium text-primary hover:text-primary/80">
           Dashboard
         </Link>
       )}
@@ -93,10 +102,15 @@ export function CustomerLayout() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-              className="h-9 w-9"
-            >
-              {resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              onClick={() =>
+                setTheme(resolvedTheme === "dark" ? "light" : "dark")
+              }
+              className="h-9 w-9">
+              {resolvedTheme === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
             </Button>
 
             {user ? (
@@ -104,7 +118,7 @@ export function CustomerLayout() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="gap-2">
                     <User className="h-4 w-4" />
-                    <span className="hidden sm:inline">{user.username}</span>
+                    <span className="hidden sm:inline">{user.name}</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -118,7 +132,9 @@ export function CustomerLayout() {
                       My Orders
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem onClick={logout} className="text-destructive">
+                  <DropdownMenuItem
+                    onClick={logout}
+                    className="text-destructive">
                     <LogOut className="mr-2 h-4 w-4" />
                     Logout
                   </DropdownMenuItem>
@@ -133,7 +149,10 @@ export function CustomerLayout() {
             {/* Mobile Menu */}
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 md:hidden">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 md:hidden">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
@@ -156,15 +175,30 @@ export function CustomerLayout() {
       {user && !isManager && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background md:hidden">
           <div className="flex h-16 items-center justify-around">
-            <Link to="/" className={cn("flex flex-col items-center gap-1", location.pathname === "/" && "text-primary")}>
+            <Link
+              to="/"
+              className={cn(
+                "flex flex-col items-center gap-1",
+                location.pathname === "/" && "text-primary"
+              )}>
               <Store className="h-5 w-5" />
               <span className="text-xs">Shop</span>
             </Link>
-            <Link to="/orders" className={cn("flex flex-col items-center gap-1", location.pathname === "/orders" && "text-primary")}>
+            <Link
+              to="/orders"
+              className={cn(
+                "flex flex-col items-center gap-1",
+                location.pathname === "/orders" && "text-primary"
+              )}>
               <Package className="h-5 w-5" />
               <span className="text-xs">Orders</span>
             </Link>
-            <Link to="/cart" className={cn("relative flex flex-col items-center gap-1", location.pathname === "/cart" && "text-primary")}>
+            <Link
+              to="/cart"
+              className={cn(
+                "relative flex flex-col items-center gap-1",
+                location.pathname === "/cart" && "text-primary"
+              )}>
               <ShoppingCart className="h-5 w-5" />
               <span className="text-xs">Cart</span>
               {cartCount > 0 && (
@@ -173,7 +207,12 @@ export function CustomerLayout() {
                 </Badge>
               )}
             </Link>
-            <Link to="/profile" className={cn("flex flex-col items-center gap-1", location.pathname === "/profile" && "text-primary")}>
+            <Link
+              to="/profile"
+              className={cn(
+                "flex flex-col items-center gap-1",
+                location.pathname === "/profile" && "text-primary"
+              )}>
               <User className="h-5 w-5" />
               <span className="text-xs">Profile</span>
             </Link>

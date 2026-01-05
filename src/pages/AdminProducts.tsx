@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { DataTable } from "@/components/dashboard/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,15 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Search, Pencil, Trash2, Loader2 } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
 
@@ -20,40 +28,88 @@ interface Product {
   name: string;
   price: number;
   stock: number;
-  category: string;
+  seller_id: number;
+  category: string; // New Field
+  description: string; // New Field
 }
 
 export default function AdminProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Initial Form State
   const [form, setForm] = useState<Product>({
     id: 0,
     name: "",
     price: 0,
     stock: 0,
-    category: "General",
+    seller_id: 0,
+    category: "",
+    description: "",
   });
 
   const { getToken, API_URL } = useAuth();
 
+  // Debounce Logic: Wait 500ms after typing stops before updating debouncedSearch
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  // Fetch when Page changes OR Search term changes
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [page, debouncedSearch]);
 
   const fetchProducts = async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/product`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
+      const headers = { Authorization: `Bearer ${getToken()}` };
+      let url = "";
+
+      // 1. If Searching, use the Elastic Search Endpoint
+      if (debouncedSearch.length > 0) {
+        url = `${API_URL}/product/search?q=${encodeURIComponent(
+          debouncedSearch
+        )}`;
+      }
+      // 2. If NOT searching, use the standard DB Pagination
+      else {
+        url = `${API_URL}/product?page=${page}&pageSize=${pageSize}`;
+      }
+
+      const res = await fetch(url, { headers });
       const data = await res.json();
-      // Add placeholder category
-      const mapped = data.map((p: any) => ({ ...p, category: "General" }));
-      setProducts(mapped);
+
+      // Handle different structures (Search returns Array, DB returns Paged Object)
+      if (Array.isArray(data)) {
+        setProducts(data);
+        // Elastic search in this simple setup returns a flat list, so we disable pagination controls
+        setTotalCount(data.length);
+        setTotalPages(1);
+      } else if (data.items) {
+        setProducts(data.items);
+        setTotalCount(data.totalCount);
+        setTotalPages(data.totalPages);
+      } else {
+        setProducts([]);
+      }
     } catch (err) {
       console.error(err);
+      toast({ title: "Failed to load products", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -61,49 +117,41 @@ export default function AdminProducts() {
 
   const handleSave = async () => {
     try {
-      if (isEditing) {
-        // BACKEND LIMITATION: Only Stock Update is supported via API for now
-        const res = await fetch(`${API_URL}/product/stock/${form.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${getToken()}`,
-          },
-          body: JSON.stringify(form.stock), // Sending plain int as per controller
-        });
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getToken()}`,
+      };
 
-        if (res.ok) {
-          toast({
-            title: "Stock Updated",
-            description: "Only stock quantity was updated.",
-          });
-          fetchProducts();
-        }
+      const body = JSON.stringify({
+        ...form,
+        price: Number(form.price),
+        stock: Number(form.stock),
+      });
+
+      if (isEditing) {
+        const res = await fetch(`${API_URL}/product/${form.id}`, {
+          method: "PUT",
+          headers,
+          body,
+        });
+        if (!res.ok) throw new Error("Update failed");
+        toast({ title: "Product Updated" });
       } else {
-        // CREATE
         const res = await fetch(`${API_URL}/product`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${getToken()}`,
-          },
-          body: JSON.stringify({
-            name: form.name,
-            price: form.price,
-            stock: form.stock,
-          }),
+          headers,
+          body,
         });
-
-        if (res.ok) {
-          toast({ title: "Product Created" });
-          fetchProducts();
-        }
+        if (!res.ok) throw new Error("Creation failed");
+        toast({ title: "Product Created" });
       }
+
+      fetchProducts();
       setDialogOpen(false);
     } catch (error) {
       toast({
         title: "Error",
-        description: "Operation failed",
+        description: "Operation failed.",
         variant: "destructive",
       });
     }
@@ -117,7 +165,7 @@ export default function AdminProducts() {
           headers: { Authorization: `Bearer ${getToken()}` },
         });
         if (res.ok) {
-          setProducts(products.filter((p) => p.id !== product.id));
+          fetchProducts();
           toast({ title: "Product deleted", variant: "destructive" });
         }
       } catch (err) {
@@ -133,14 +181,18 @@ export default function AdminProducts() {
   };
 
   const handleCreate = () => {
-    setForm({ id: 0, name: "", price: 0, stock: 0, category: "General" });
+    setForm({
+      id: 0,
+      name: "",
+      price: 0,
+      stock: 0,
+      seller_id: 0,
+      category: "",
+      description: "",
+    });
     setIsEditing(false);
     setDialogOpen(true);
   };
-
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -150,7 +202,7 @@ export default function AdminProducts() {
             🛠️ Manage Products
           </h1>
           <p className="text-muted-foreground">
-            Add products or update stock levels.
+            Create, update, and manage your inventory.
           </p>
         </div>
         <Button onClick={handleCreate} className="gap-2">
@@ -172,77 +224,126 @@ export default function AdminProducts() {
       {loading ? (
         <Loader2 className="animate-spin" />
       ) : (
-        <DataTable
-          columns={[
-            {
-              header: "ID",
-              accessorKey: "id",
-              className: "font-mono text-sm w-20",
-            },
-            { header: "Name", accessorKey: "name", className: "font-medium" },
-            {
-              header: "Price",
-              accessorKey: (row) => `$${row.price.toFixed(2)}`,
-            },
-            { header: "Stock", accessorKey: "stock" },
-            {
-              header: "Actions",
-              accessorKey: (row) => (
-                <div className="flex justify-end gap-2">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => handleEdit(row)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => handleDelete(row)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ),
-              className: "text-right w-24",
-            },
-          ]}
-          data={filteredProducts}
-          emptyMessage="No products found."
-        />
+        <>
+          <DataTable
+            columns={[
+              { header: "ID", accessorKey: "id", className: "w-12 font-mono" },
+              { header: "Name", accessorKey: "name", className: "font-medium" },
+              { header: "Category", accessorKey: "category" }, // New Column
+              {
+                header: "Price",
+                accessorKey: (row) => `$${row.price.toFixed(2)}`,
+              },
+              { header: "Stock", accessorKey: "stock" },
+              {
+                header: "Actions",
+                accessorKey: (row) => (
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleEdit(row)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() => handleDelete(row)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ),
+                className: "text-right",
+              },
+            ]}
+            // FIX: Pass 'products' directly. Do NOT filter client-side.
+            data={products}
+            emptyMessage="No products found."
+          />
+
+          {/* Pagination Controls (Hide if searching, as Elastic returns all matches) */}
+          {debouncedSearch === "" && (
+            <div className="flex items-center justify-end space-x-2 py-4">
+              <div className="text-sm text-muted-foreground mr-4">
+                Page {page} of {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((old) => Math.max(old - 1, 1))}
+                disabled={page === 1}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((old) => Math.min(old + 1, totalPages))}
+                disabled={page === totalPages}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
+      {/* Add/Edit Modal */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {isEditing ? "Edit Product Stock" : "Add New Product"}
+              {isEditing ? "Edit Product" : "Add New Product"}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
+          <div className="grid gap-4 py-4">
+            {/* Name */}
+            <div className="grid gap-2">
               <Label htmlFor="name">Product Name</Label>
               <Input
                 id="name"
-                disabled={isEditing} // Name immutable on edit based on API
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </div>
+
+            {/* Category (New) */}
+            <div className="grid gap-2">
+              <Label htmlFor="category">Category</Label>
+              <Input
+                id="category"
+                placeholder="e.g. Electronics, Books"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+              />
+            </div>
+
+            {/* Description (New) */}
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="Product details..."
+                value={form.description}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
+              />
+            </div>
+
+            {/* Price & Stock */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="grid gap-2">
                 <Label htmlFor="price">Price ($)</Label>
                 <Input
                   id="price"
                   type="number"
-                  disabled={isEditing} // Price immutable on edit
                   value={form.price}
                   onChange={(e) =>
                     setForm({ ...form, price: Number(e.target.value) })
                   }
                 />
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-2">
                 <Label htmlFor="stock">Stock</Label>
                 <Input
                   id="stock"
@@ -254,18 +355,13 @@ export default function AdminProducts() {
                 />
               </div>
             </div>
-            {isEditing && (
-              <p className="text-xs text-muted-foreground">
-                Only Stock can be updated currently.
-              </p>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSave}>
-              {isEditing ? "Update Stock" : "Add Product"}
+              {isEditing ? "Update" : "Create"}
             </Button>
           </DialogFooter>
         </DialogContent>
