@@ -16,7 +16,11 @@ import {
   Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface NavItem {
   title: string;
@@ -26,13 +30,43 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["SuperAdmin", "Admin"] },
-  { title: "Products", href: "/admin/products", icon: Package, roles: ["SuperAdmin", "Admin"] },
-  { title: "Orders", href: "/admin/orders", icon: ShoppingCart, roles: ["SuperAdmin", "Admin"] },
-  { title: "Manage Admins", href: "/super-admin", icon: Shield, roles: ["SuperAdmin"] },
+  {
+    title: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+    roles: ["SuperAdmin", "Admin"],
+  },
+  {
+    title: "Products",
+    href: "/admin/products",
+    icon: Package,
+    roles: ["SuperAdmin", "Admin"],
+  },
+  {
+    title: "Orders",
+    href: "/admin/orders",
+    icon: ShoppingCart,
+    roles: ["SuperAdmin", "Admin"],
+  },
+  {
+    title: "Manage Admins",
+    href: "/super-admin",
+    icon: Shield,
+    roles: ["SuperAdmin"],
+  },
   { title: "Users", href: "/admin/users", icon: Users, roles: ["SuperAdmin"] },
-  { title: "Reports", href: "/admin/reports", icon: FileText, roles: ["SuperAdmin", "Admin"] },
-  { title: "Settings", href: "/admin/settings", icon: Settings, roles: ["SuperAdmin", "Admin"] },
+  {
+    title: "Reports",
+    href: "/admin/reports",
+    icon: FileText,
+    roles: ["SuperAdmin", "Admin"],
+  },
+  {
+    title: "Settings",
+    href: "/admin/settings",
+    icon: Settings,
+    roles: ["SuperAdmin", "Admin"],
+  },
 ];
 
 export function DashboardSidebar() {
@@ -49,15 +83,16 @@ export function DashboardSidebar() {
       className={cn(
         "fixed left-0 top-0 z-40 h-screen border-r border-sidebar-border bg-sidebar transition-all duration-300 ease-in-out",
         collapsed ? "w-16" : "w-64"
-      )}
-    >
+      )}>
       <div className="flex h-full flex-col">
         {/* Logo */}
         <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
           {!collapsed && (
             <div className="flex items-center gap-2">
               <Store className="h-6 w-6 text-primary" />
-              <span className="text-lg font-semibold text-sidebar-accent-foreground">MicroShop</span>
+              <span className="text-lg font-semibold text-sidebar-accent-foreground">
+                MicroShop
+              </span>
             </div>
           )}
           {collapsed && <Store className="mx-auto h-6 w-6 text-primary" />}
@@ -80,8 +115,7 @@ export function DashboardSidebar() {
                         isActive
                           ? "bg-primary text-primary-foreground shadow-md"
                           : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      )}
-                    >
+                      )}>
                       <Icon className="h-5 w-5" />
                     </NavLink>
                   </TooltipTrigger>
@@ -101,8 +135,7 @@ export function DashboardSidebar() {
                   isActive
                     ? "bg-primary text-primary-foreground shadow-md"
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-              >
+                )}>
                 <Icon className="h-5 w-5 shrink-0" />
                 <span>{item.title}</span>
                 {isActive && (
@@ -117,7 +150,10 @@ export function DashboardSidebar() {
         <div className="border-t border-sidebar-border p-3">
           {!collapsed && user && (
             <div className="mb-3 rounded-lg bg-sidebar-accent p-3">
-              <p className="text-sm font-medium text-sidebar-accent-foreground">{user.username}</p>
+              {/* UPDATED: Shows Name instead of Username */}
+              <p className="text-sm font-medium text-sidebar-accent-foreground">
+                {user.name || user.username}
+              </p>
               <p className="text-xs text-sidebar-foreground">{user.role}</p>
             </div>
           )}
@@ -129,12 +165,13 @@ export function DashboardSidebar() {
                   variant="ghost"
                   size="icon"
                   onClick={logout}
-                  className="h-10 w-10 text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
+                  className="h-10 w-10 text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive">
                   <LogOut className="h-5 w-5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side={collapsed ? "right" : "top"}>Logout</TooltipContent>
+              <TooltipContent side={collapsed ? "right" : "top"}>
+                Logout
+              </TooltipContent>
             </Tooltip>
 
             {!collapsed && <div className="flex-1" />}
@@ -145,9 +182,12 @@ export function DashboardSidebar() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setCollapsed(!collapsed)}
-                  className="h-10 w-10 text-sidebar-foreground hover:bg-sidebar-accent"
-                >
-                  {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+                  className="h-10 w-10 text-sidebar-foreground hover:bg-sidebar-accent">
+                  {collapsed ? (
+                    <ChevronRight className="h-5 w-5" />
+                  ) : (
+                    <ChevronLeft className="h-5 w-5" />
+                  )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side={collapsed ? "right" : "top"}>
