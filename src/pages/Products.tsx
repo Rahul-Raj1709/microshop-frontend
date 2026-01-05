@@ -3,8 +3,23 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Search, ShoppingCart, Package, Loader2 } from "lucide-react";
+import {
+  Search,
+  ShoppingCart,
+  Package,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+} from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 interface Product {
@@ -13,40 +28,88 @@ interface Product {
   price: number;
   stock: number;
   image?: string;
-  category?: string;
+  category?: string; // New
+  description?: string; // New
 }
 
 export default function Products() {
   const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  // Debounce for search
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+
   const { user, getToken, API_URL } = useAuth();
 
+  // Handle Search Debounce (wait 500ms before calling API)
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  // Fetch when dependencies change
   useEffect(() => {
     fetchProducts();
-  }, [getToken]);
+  }, [getToken, page, selectedCategory, debouncedSearch]);
 
   const fetchProducts = async () => {
+    setLoading(true);
     try {
       const token = getToken();
       const headers: any = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const res = await fetch(`${API_URL}/product`, { headers });
+      let url = "";
+
+      // LOGIC: If searching, use Elastic. If browsing, use DB with Category Filter.
+      if (debouncedSearch.length > 0) {
+        url = `${API_URL}/product/search?q=${encodeURIComponent(
+          debouncedSearch
+        )}`;
+      } else {
+        url = `${API_URL}/product?page=${page}&pageSize=9`;
+        if (selectedCategory && selectedCategory !== "all") {
+          url += `&category=${encodeURIComponent(selectedCategory)}`;
+        }
+      }
+
+      const res = await fetch(url, { headers });
       if (!res.ok) throw new Error("Failed to fetch products");
 
       const data = await res.json();
 
-      const mappedProducts = data.map((p: any) => ({
+      let items: Product[] = [];
+
+      // Handle response differences:
+      // Search returns List<Product>, Standard returns PagedResult { items: ... }
+      if (Array.isArray(data)) {
+        items = data; // From Elasticsearch
+        setTotalPages(1); // Search results are usually not paginated in this simple setup
+      } else if (data.items) {
+        items = data.items; // From DB
+        setTotalPages(data.totalPages);
+      }
+
+      // Add dummy image if missing
+      const mappedProducts = items.map((p: any) => ({
         ...p,
         image:
+          p.image ||
           "https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=400&h=300&fit=crop",
-        category: "General",
       }));
 
       setProducts(mappedProducts);
     } catch (error) {
       console.error(error);
+      toast({ title: "Error loading products", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -57,7 +120,6 @@ export default function Products() {
       toast({ title: "Login required", variant: "destructive" });
       return;
     }
-
     try {
       const res = await fetch(`${API_URL}/cart`, {
         method: "POST",
@@ -71,7 +133,6 @@ export default function Products() {
           quantity: 1,
         }),
       });
-
       if (res.ok) {
         toast({
           title: "Added to cart!",
@@ -87,69 +148,133 @@ export default function Products() {
     }
   };
 
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Latest Products</h1>
-        <p className="text-muted-foreground">Discover our collection.</p>
+        <p className="text-muted-foreground">
+          Search via Elasticsearch or filter by Category.
+        </p>
       </div>
 
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search products..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10"
-        />
+      <div className="flex flex-col sm:flex-row gap-4">
+        {/* Search Bar */}
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search products..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+
+        {/* Category Filter */}
+        <div className="w-full sm:w-[200px]">
+          <Select
+            value={selectedCategory}
+            onValueChange={(val) => {
+              setPage(1);
+              setSelectedCategory(val);
+            }}>
+            <SelectTrigger>
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                <SelectValue placeholder="Category" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="Electronics">Electronics</SelectItem>
+              <SelectItem value="Clothing">Clothing</SelectItem>
+              <SelectItem value="Home & Kitchen">Home & Kitchen</SelectItem>
+              <SelectItem value="Sports">Sports</SelectItem>
+              <SelectItem value="Furniture">Furniture</SelectItem>
+              <SelectItem value="Accessories">Accessories</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {loading ? (
         <div className="flex justify-center p-12">
-          <Loader2 className="animate-spin h-8 w-8" />
+          <Loader2 className="animate-spin h-8 w-8 text-primary" />
         </div>
       ) : (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredProducts.map((product) => (
-            <Card
-              key={product.id}
-              className="group overflow-hidden hover:shadow-lg">
-              <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="h-full w-full object-cover"
-                />
-                <Badge className="absolute left-3 top-3">
-                  {product.category}
-                </Badge>
-              </div>
-              <CardContent className="p-4">
-                <h3 className="text-lg font-semibold">{product.name}</h3>
-                <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                  <Package className="h-4 w-4" />
-                  <span>{product.stock} in stock</span>
-                </div>
-                <p className="mt-3 text-2xl font-bold text-primary">
-                  ${product.price}
-                </p>
-              </CardContent>
-              <CardFooter className="p-4 pt-0">
-                <Button
-                  onClick={() => addToCart(product)}
-                  className="w-full gap-2"
-                  disabled={product.stock === 0}>
-                  <ShoppingCart className="h-4 w-4" />
-                  {product.stock === 0 ? "Out of Stock" : "Add to Cart"}
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+        <>
+          {products.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              No products found.
+            </div>
+          ) : (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {products.map((product) => (
+                <Card
+                  key={product.id}
+                  className="group overflow-hidden hover:shadow-lg flex flex-col">
+                  <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                    />
+                    {product.category && (
+                      <Badge className="absolute left-3 top-3">
+                        {product.category}
+                      </Badge>
+                    )}
+                  </div>
+                  <CardContent className="p-4 flex-1">
+                    <h3 className="text-lg font-semibold line-clamp-1">
+                      {product.name}
+                    </h3>
+                    {/* Display Description (truncated to 2 lines) */}
+                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2 h-8">
+                      {product.description || ""}
+                    </p>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Package className="h-4 w-4" />
+                      <span>{product.stock} in stock</span>
+                    </div>
+                    <p className="mt-3 text-2xl font-bold text-primary">
+                      ${product.price}
+                    </p>
+                  </CardContent>
+                  <CardFooter className="p-4 pt-0">
+                    <Button
+                      onClick={() => addToCart(product)}
+                      className="w-full gap-2"
+                      disabled={product.stock === 0}>
+                      <ShoppingCart className="h-4 w-4" />
+                      {product.stock === 0 ? "Out of Stock" : "Add to Cart"}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Pagination Controls (Only show if NOT searching) */}
+          {debouncedSearch === "" && products.length > 0 && (
+            <div className="flex justify-center items-center gap-4 py-8">
+              <Button
+                variant="outline"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}>
+                <ChevronLeft className="h-4 w-4 mr-2" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}>
+                Next <ChevronRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
