@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useCart } from "@/context/CartContext"; // [!code ++]
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,19 +11,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { Trash2, ShoppingBag, ArrowRight } from "lucide-react";
+import { Trash2, ShoppingBag, ArrowRight, Plus, Minus } from "lucide-react";
 
 interface CartItem {
   productId: number;
   product: string;
   quantity: number;
-  price?: number; // Backend CartItem doesn't store price, so we might treat it as 0 or fetch it
+  price?: number;
   image?: string;
 }
 
 export default function Cart() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const { user, getToken, API_URL } = useAuth();
+  const { refreshCart } = useCart(); // [!code ++] Get the global refresh function
   const navigate = useNavigate();
 
   if (!user) return <Navigate to="/login" replace />;
@@ -38,18 +40,93 @@ export default function Cart() {
       });
       if (res.ok) {
         const data = await res.json();
-        // Add placeholder data for display
         setCart(
           data.map((i: any) => ({
             ...i,
-            price: 0, // Backend Redis cart didn't store price, ideally update CartAPI to store it
+            price: 0,
             image:
               "https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=100&h=100&fit=crop",
           }))
         );
+        // Ensure global count is in sync with what we just fetched
+        refreshCart(); // [!code ++]
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const updateQuantity = async (item: CartItem, delta: number) => {
+    const newQuantity = item.quantity + delta;
+    if (newQuantity < 1) return;
+
+    try {
+      const res = await fetch(`${API_URL}/cart`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          productId: item.productId,
+          product: item.product,
+          quantity: newQuantity,
+        }),
+      });
+
+      if (res.ok) {
+        setCart((prev) =>
+          prev.map((c) =>
+            c.productId === item.productId ? { ...c, quantity: newQuantity } : c
+          )
+        );
+        // Refresh the global badge count
+        refreshCart(); // [!code ++]
+      } else {
+        toast({
+          title: "Update failed",
+          description: "Could not update cart quantity.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Error",
+        description: "Something went wrong.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const removeItem = async (productId: number) => {
+    try {
+      const res = await fetch(`${API_URL}/cart/${productId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+
+      if (res.ok) {
+        setCart((prev) => prev.filter((c) => c.productId !== productId));
+        toast({
+          title: "Item removed",
+          description: "Item removed from cart.",
+        });
+        // Refresh the global badge count
+        refreshCart(); // [!code ++]
+      } else {
+        toast({
+          title: "Remove failed",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Error",
+        description: "Could not remove item.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -66,6 +143,7 @@ export default function Cart() {
           description: "Redirecting to orders...",
         });
         setCart([]);
+        refreshCart(); // [!code ++] Clear the badge to 0
         setTimeout(() => navigate("/orders"), 1500);
       } else {
         toast({
@@ -105,22 +183,55 @@ export default function Cart() {
               <CardContent className="flex items-center gap-4 p-4">
                 <img
                   src={item.image}
+                  alt={item.product}
                   className="h-20 w-20 rounded-lg object-cover"
                 />
                 <div className="flex-1">
                   <h3 className="font-semibold">{item.product}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Quantity: {item.quantity}
-                  </p>
+                  <div className="mt-2 flex items-center gap-3">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => updateQuantity(item, -1)}
+                      disabled={item.quantity <= 1}>
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <span className="text-sm font-medium w-4 text-center">
+                      {item.quantity}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => updateQuantity(item, 1)}>
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => removeItem(item.productId)}>
+                  <Trash2 className="h-5 w-5" />
+                </Button>
               </CardContent>
             </Card>
           ))}
         </div>
+
         <Card className="h-fit">
           <CardHeader>
             <CardTitle>Checkout</CardTitle>
           </CardHeader>
+          <CardContent>
+            <div className="flex justify-between font-medium">
+              <span>Total Items</span>
+              <span>{cart.reduce((acc, item) => acc + item.quantity, 0)}</span>
+            </div>
+          </CardContent>
           <CardFooter>
             <Button className="w-full gap-2" size="lg" onClick={handleCheckout}>
               Checkout <ArrowRight className="h-4 w-4" />

@@ -21,6 +21,7 @@ import {
   Filter,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useCart } from "@/context/CartContext"; // [!code ++]
 
 interface Product {
   id: number;
@@ -28,8 +29,8 @@ interface Product {
   price: number;
   stock: number;
   image?: string;
-  category?: string; // New
-  description?: string; // New
+  category?: string;
+  description?: string;
 }
 
 export default function Products() {
@@ -37,17 +38,13 @@ export default function Products() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Pagination State
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-
-  // Debounce for search
   const [debouncedSearch, setDebouncedSearch] = useState(search);
 
   const { user, getToken, API_URL } = useAuth();
+  const { refreshCart } = useCart(); // [!code ++]
 
-  // Handle Search Debounce (wait 500ms before calling API)
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(search);
@@ -55,7 +52,6 @@ export default function Products() {
     return () => clearTimeout(handler);
   }, [search]);
 
-  // Fetch when dependencies change
   useEffect(() => {
     fetchProducts();
   }, [getToken, page, selectedCategory, debouncedSearch]);
@@ -69,7 +65,6 @@ export default function Products() {
 
       let url = "";
 
-      // LOGIC: If searching, use Elastic. If browsing, use DB with Category Filter.
       if (debouncedSearch.length > 0) {
         url = `${API_URL}/product/search?q=${encodeURIComponent(
           debouncedSearch
@@ -85,20 +80,16 @@ export default function Products() {
       if (!res.ok) throw new Error("Failed to fetch products");
 
       const data = await res.json();
-
       let items: Product[] = [];
 
-      // Handle response differences:
-      // Search returns List<Product>, Standard returns PagedResult { items: ... }
       if (Array.isArray(data)) {
-        items = data; // From Elasticsearch
-        setTotalPages(1); // Search results are usually not paginated in this simple setup
+        items = data;
+        setTotalPages(1);
       } else if (data.items) {
-        items = data.items; // From DB
+        items = data.items;
         setTotalPages(data.totalPages);
       }
 
-      // Add dummy image if missing
       const mappedProducts = items.map((p: any) => ({
         ...p,
         image:
@@ -138,6 +129,7 @@ export default function Products() {
           title: "Added to cart!",
           description: `${product.name} added.`,
         });
+        refreshCart(); // [!code ++] Update header immediately
       }
     } catch (error) {
       toast({
@@ -148,6 +140,7 @@ export default function Products() {
     }
   };
 
+  // ... (Rest of UI remains the same)
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="space-y-2">
@@ -228,7 +221,6 @@ export default function Products() {
                     <h3 className="text-lg font-semibold line-clamp-1">
                       {product.name}
                     </h3>
-                    {/* Display Description (truncated to 2 lines) */}
                     <p className="text-xs text-muted-foreground mb-2 line-clamp-2 h-8">
                       {product.description || ""}
                     </p>
@@ -254,7 +246,7 @@ export default function Products() {
             </div>
           )}
 
-          {/* Pagination Controls (Only show if NOT searching) */}
+          {/* Pagination Controls */}
           {debouncedSearch === "" && products.length > 0 && (
             <div className="flex justify-center items-center gap-4 py-8">
               <Button

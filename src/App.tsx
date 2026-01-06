@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { CartProvider } from "@/context/CartContext"; // [!code ++]
 
 // Layouts
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -26,37 +27,40 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              {/* Auth */}
-              <Route path="/login" element={<Login />} />
+        {/* Wrap CartProvider inside AuthProvider so it can access the user */}
+        <CartProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                {/* Auth */}
+                <Route path="/login" element={<Login />} />
 
-              {/* Admin Routes */}
-              <Route element={<DashboardLayout />}>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/admin/products" element={<AdminProducts />} />
-                <Route path="/admin/orders" element={<Dashboard />} />
-                <Route path="/admin/users" element={<Dashboard />} />
-                <Route path="/admin/reports" element={<Dashboard />} />
-                <Route path="/admin/settings" element={<Dashboard />} />
-                <Route path="/super-admin" element={<SuperAdmin />} />
-              </Route>
+                {/* Admin Routes */}
+                <Route element={<DashboardLayout />}>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/admin/products" element={<AdminProducts />} />
+                  <Route path="/admin/orders" element={<Dashboard />} />
+                  <Route path="/admin/users" element={<Dashboard />} />
+                  <Route path="/admin/reports" element={<Dashboard />} />
+                  <Route path="/admin/settings" element={<Dashboard />} />
+                  <Route path="/super-admin" element={<SuperAdmin />} />
+                </Route>
 
-              {/* Customer Routes */}
-              <Route element={<CustomerLayout />}>
-                <Route path="/" element={<Products />} />
-                <Route path="/cart" element={<Cart />} />
-                <Route path="/orders" element={<Orders />} />
-              </Route>
+                {/* Customer Routes */}
+                <Route element={<CustomerLayout />}>
+                  <Route path="/" element={<Products />} />
+                  <Route path="/cart" element={<Cart />} />
+                  <Route path="/orders" element={<Orders />} />
+                </Route>
 
-              {/* Catch-all */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
+                {/* Catch-all */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </CartProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>

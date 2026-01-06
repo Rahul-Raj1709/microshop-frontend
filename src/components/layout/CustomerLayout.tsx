@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useCart } from "@/context/CartContext";
 import { useTheme } from "@/context/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,18 +21,18 @@ import {
   Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 export function CustomerLayout() {
   const { user, logout } = useAuth();
+  const { cartCount } = useCart();
   const { resolvedTheme, setTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
-  const [cartCount] = useState(3); // Mock cart count
 
   const isManager = user?.role === "SuperAdmin" || user?.role === "Admin";
 
+  // ... (NavLinks function remains the same) ...
   const NavLinks = () => (
     <>
       <Link
@@ -86,18 +87,15 @@ export function CustomerLayout() {
       {/* Header */}
       <header className="glass-header sticky top-0 z-50">
         <div className="container flex h-16 items-center justify-between">
-          {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
             <Store className="h-6 w-6 text-primary" />
             <span className="text-lg font-semibold">MicroShop</span>
           </Link>
 
-          {/* Desktop Nav */}
           <nav className="hidden items-center gap-6 md:flex">
             <NavLinks />
           </nav>
 
-          {/* Actions */}
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
@@ -132,8 +130,12 @@ export function CustomerLayout() {
                       My Orders
                     </DropdownMenuItem>
                   )}
+                  {/* FIX: Add navigation to the logout click handler */}
                   <DropdownMenuItem
-                    onClick={logout}
+                    onClick={() => {
+                      logout();
+                      navigate("/login");
+                    }}
                     className="text-destructive">
                     <LogOut className="mr-2 h-4 w-4" />
                     Logout
@@ -146,7 +148,6 @@ export function CustomerLayout() {
               </Button>
             )}
 
-            {/* Mobile Menu */}
             <Sheet>
               <SheetTrigger asChild>
                 <Button
@@ -166,12 +167,11 @@ export function CustomerLayout() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="container py-8">
         <Outlet />
       </main>
 
-      {/* Mobile Bottom Nav (Customer Only) */}
+      {/* ... (Mobile Nav remains the same) ... */}
       {user && !isManager && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background md:hidden">
           <div className="flex h-16 items-center justify-around">

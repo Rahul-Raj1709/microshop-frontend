@@ -10,16 +10,33 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from "@/components/ui/card";
-import { Store, Loader2, Eye, EyeOff } from "lucide-react";
+import { Store, Loader2, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
+type ViewState = "login" | "register" | "forgot" | "verify";
+
 export default function Login() {
+  // State for View Switching
+  const [view, setView] = useState<ViewState>("login");
+
+  // Common Fields
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // Register Fields
+  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState("");
+
+  // Verify Fields
+  const [otp, setOtp] = useState("");
+
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { login, user } = useAuth();
+
+  const { login, user, API_URL } = useAuth();
   const navigate = useNavigate();
 
   // Redirect if already logged in
@@ -28,160 +45,359 @@ export default function Login() {
     return <Navigate to={destination} replace />;
   }
 
-  // Helper to decode token for immediate redirection logic
-  const parseJwt = (token: string) => {
-    try {
-      const base64Url = token.split(".")[1];
-      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-      const jsonPayload = decodeURIComponent(
-        window
-          .atob(base64)
-          .split("")
-          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-          .join("")
-      );
-      return JSON.parse(jsonPayload);
-    } catch (e) {
-      return null;
-    }
-  };
+  // --- HANDLERS ---
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // 1. LOGIN
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-
     const success = await login(email, password);
+    setIsLoading(false);
 
     if (success) {
-      toast({
-        title: "Welcome back!",
-        description: "You have successfully logged in.",
-      });
-
-      // We read the token directly here because React State updates (user) are asynchronous
-      // and might not be ready immediately for this logic.
-      const token = localStorage.getItem("token");
-      if (token) {
-        const claims = parseJwt(token);
-        // Your Backend AuthAPI returns a claim named "role"
-        const role = claims?.role;
-        navigate(role === "Customer" ? "/" : "/dashboard");
-      } else {
-        // Fallback safety
-        navigate("/");
-      }
+      toast({ title: "Welcome back!" });
+      // Navigation is handled by the redirect check above or logic inside login
     } else {
       toast({
         title: "Login failed",
-        description: "Invalid credentials. Please try again.",
+        description: "Invalid credentials.",
         variant: "destructive",
       });
     }
-
-    setIsLoading(false);
   };
+
+  // 2. REGISTER
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, username, email, phoneNumber: phone }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast({
+          title: "Registration Successful",
+          description: `OTP sent: ${data.mockOtp}`, // Show Mock OTP for ease
+        });
+        setView("verify"); // Move to verification step
+      } else {
+        toast({
+          title: "Error",
+          description: data || "Registration failed",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 3. FORGOT PASSWORD
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast({
+          title: "OTP Sent",
+          description: `Check your email. Mock OTP: ${data.mockOtp}`,
+        });
+        setView("verify");
+      } else {
+        toast({
+          title: "Error",
+          description: "User not found",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Request failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 4. VERIFY OTP & SET PASSWORD
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp, newPassword: password }),
+      });
+
+      if (res.ok) {
+        toast({ title: "Success", description: "Password set! Please login." });
+        setView("login");
+        setPassword(""); // Clear password field for fresh login
+      } else {
+        toast({
+          title: "Verification Failed",
+          description: "Invalid OTP or Email",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Verification failed",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- RENDER HELPERS ---
+
+  const renderLogin = () => (
+    <form onSubmit={handleLogin} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="email">Email</Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="user@example.com"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password">Password</Label>
+          <button
+            type="button"
+            className="text-xs text-primary hover:underline"
+            onClick={() => setView("forgot")}>
+            Forgot password?
+          </button>
+        </div>
+        <div className="relative">
+          <Input
+            id="password"
+            type={showPassword ? "text" : "password"}
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-0 top-0 h-full px-3"
+            onClick={() => setShowPassword(!showPassword)}>
+            {showPassword ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      </div>
+      <Button type="submit" className="w-full" disabled={isLoading}>
+        {isLoading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          "Sign In"
+        )}
+      </Button>
+      <div className="mt-4 text-center text-sm">
+        Don't have an account?{" "}
+        <button
+          type="button"
+          className="underline"
+          onClick={() => setView("register")}>
+          Sign up
+        </button>
+      </div>
+    </form>
+  );
+
+  const renderRegister = () => (
+    <form onSubmit={handleRegister} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Name</Label>
+          <Input
+            id="name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="username">Username</Label>
+          <Input
+            id="username"
+            required
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="reg-email">Email</Label>
+        <Input
+          id="reg-email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="phone">Phone</Label>
+        <Input
+          id="phone"
+          required
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+        />
+      </div>
+      <Button type="submit" className="w-full" disabled={isLoading}>
+        {isLoading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          "Sign Up"
+        )}
+      </Button>
+      <div className="mt-4 text-center text-sm">
+        Already have an account?{" "}
+        <button
+          type="button"
+          className="underline"
+          onClick={() => setView("login")}>
+          Sign in
+        </button>
+      </div>
+    </form>
+  );
+
+  const renderForgot = () => (
+    <form onSubmit={handleForgot} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="forgot-email">Enter your email</Label>
+        <Input
+          id="forgot-email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </div>
+      <Button type="submit" className="w-full" disabled={isLoading}>
+        {isLoading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          "Send OTP"
+        )}
+      </Button>
+      <Button
+        variant="ghost"
+        className="w-full"
+        onClick={() => setView("login")}>
+        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Login
+      </Button>
+    </form>
+  );
+
+  const renderVerify = () => (
+    <form onSubmit={handleVerify} className="space-y-4">
+      <div className="bg-muted/50 p-3 rounded-md text-sm text-center mb-4">
+        We sent a code to <strong>{email}</strong>.
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="otp">OTP Code</Label>
+        <Input
+          id="otp"
+          placeholder="123456"
+          required
+          value={otp}
+          onChange={(e) => setOtp(e.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="new-pass">New Password</Label>
+        <Input
+          id="new-pass"
+          type="password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      </div>
+      <Button type="submit" className="w-full" disabled={isLoading}>
+        {isLoading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          "Set Password & Activate"
+        )}
+      </Button>
+      <Button
+        variant="ghost"
+        className="w-full"
+        onClick={() => setView("login")}>
+        Cancel
+      </Button>
+    </form>
+  );
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-md animate-fade-in">
-        {/* Logo */}
         <div className="mb-8 flex flex-col items-center gap-2">
           <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary shadow-lg">
             <Store className="h-7 w-7 text-primary-foreground" />
           </div>
           <h1 className="text-2xl font-bold">MicroShop</h1>
-          <p className="text-sm text-muted-foreground">Admin Dashboard</p>
         </div>
 
         <Card className="border-border shadow-xl">
           <CardHeader className="space-y-1 text-center">
-            <CardTitle className="text-2xl">Sign In</CardTitle>
+            <CardTitle className="text-2xl">
+              {view === "login" && "Sign In"}
+              {view === "register" && "Create Account"}
+              {view === "forgot" && "Reset Password"}
+              {view === "verify" && "Verify Email"}
+            </CardTitle>
             <CardDescription>
-              Enter your credentials to access the dashboard
+              {view === "login" &&
+                "Enter your credentials to access the dashboard"}
+              {view === "register" && "Enter your details to get started"}
+              {view === "forgot" &&
+                "We will send you a code to reset your password"}
+              {view === "verify" && "Enter the OTP code and your new password"}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@microshop.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    autoComplete="current-password"
-                    className="pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}>
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  "Sign In"
-                )}
-              </Button>
-            </form>
-
-            {/* Demo Accounts */}
-            <div className="mt-6 space-y-3 rounded-lg bg-muted/50 p-4">
-              <p className="text-center text-xs font-medium text-muted-foreground">
-                Demo Accounts
-              </p>
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-between rounded-md bg-background p-2">
-                  <span className="font-medium">Super Admin</span>
-                  <code className="text-muted-foreground">
-                    superadmin@example.com
-                  </code>
-                </div>
-                <div className="flex items-center justify-between rounded-md bg-background p-2">
-                  <span className="font-medium">Admin</span>
-                  <code className="text-muted-foreground">
-                    admin1@example.com
-                  </code>
-                </div>
-                <div className="flex items-center justify-between rounded-md bg-background p-2">
-                  <span className="font-medium">Customer</span>
-                  <code className="text-muted-foreground">
-                    user1@example.com
-                  </code>
-                </div>
-              </div>
-              <p className="text-center text-xs text-muted-foreground">
-                Use any password
-              </p>
-            </div>
+            {view === "login" && renderLogin()}
+            {view === "register" && renderRegister()}
+            {view === "forgot" && renderForgot()}
+            {view === "verify" && renderVerify()}
           </CardContent>
         </Card>
       </div>
