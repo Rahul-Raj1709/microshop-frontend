@@ -5,6 +5,7 @@ import {
   ReactNode,
   useEffect,
 } from "react";
+import { getClientId } from "../lib/clientId";
 
 // 1. GATEWAY BASE URL (Matches Ocelot Listener)
 const API_URL = "http://localhost:8080";
@@ -76,7 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 2. USE LOWERCASE UPSTREAM PATH (/auth/...)
       const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ClientId: getClientId(),
+        },
         body: JSON.stringify({ email, password }),
       });
 

@@ -10,27 +10,21 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  CardFooter,
 } from "@/components/ui/card";
 import { Store, Loader2, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { getClientId } from "@/lib/clientId"; // [!code ++]
 
 type ViewState = "login" | "register" | "forgot" | "verify";
 
 export default function Login() {
-  // State for View Switching
   const [view, setView] = useState<ViewState>("login");
 
-  // Common Fields
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  // Register Fields
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
-
-  // Verify Fields
   const [otp, setOtp] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
@@ -39,24 +33,20 @@ export default function Login() {
   const { login, user, API_URL } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect if already logged in
   if (user) {
     const destination = user.role === "Customer" ? "/" : "/dashboard";
     return <Navigate to={destination} replace />;
   }
 
-  // --- HANDLERS ---
-
-  // 1. LOGIN
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    // Context login function already has ClientId (from previous step)
     const success = await login(email, password);
     setIsLoading(false);
 
     if (success) {
       toast({ title: "Welcome back!" });
-      // Navigation is handled by the redirect check above or logic inside login
     } else {
       toast({
         title: "Login failed",
@@ -66,14 +56,16 @@ export default function Login() {
     }
   };
 
-  // 2. REGISTER
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
       const res = await fetch(`${API_URL}/auth/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ClientId: getClientId(), // [!code ++]
+        },
         body: JSON.stringify({ name, username, email, phoneNumber: phone }),
       });
 
@@ -81,9 +73,9 @@ export default function Login() {
       if (res.ok) {
         toast({
           title: "Registration Successful",
-          description: `OTP sent: ${data.mockOtp}`, // Show Mock OTP for ease
+          description: `OTP sent: ${data.mockOtp}`,
         });
-        setView("verify"); // Move to verification step
+        setView("verify");
       } else {
         toast({
           title: "Error",
@@ -102,14 +94,16 @@ export default function Login() {
     }
   };
 
-  // 3. FORGOT PASSWORD
   const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
       const res = await fetch(`${API_URL}/auth/forgot-password`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ClientId: getClientId(), // [!code ++]
+        },
         body: JSON.stringify({ email }),
       });
 
@@ -138,21 +132,23 @@ export default function Login() {
     }
   };
 
-  // 4. VERIFY OTP & SET PASSWORD
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
       const res = await fetch(`${API_URL}/auth/verify-otp`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ClientId: getClientId(), // [!code ++]
+        },
         body: JSON.stringify({ email, otp, newPassword: password }),
       });
 
       if (res.ok) {
         toast({ title: "Success", description: "Password set! Please login." });
         setView("login");
-        setPassword(""); // Clear password field for fresh login
+        setPassword("");
       } else {
         toast({
           title: "Verification Failed",
@@ -171,8 +167,7 @@ export default function Login() {
     }
   };
 
-  // --- RENDER HELPERS ---
-
+  // ... (Render Helpers remain the same) ...
   const renderLogin = () => (
     <form onSubmit={handleLogin} className="space-y-4">
       <div className="space-y-2">

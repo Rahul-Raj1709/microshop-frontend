@@ -21,7 +21,8 @@ import {
   Filter,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { useCart } from "@/context/CartContext"; // [!code ++]
+import { useCart } from "@/context/CartContext";
+import { getClientId } from "@/lib/clientId"; // [!code ++]
 
 interface Product {
   id: number;
@@ -43,7 +44,7 @@ export default function Products() {
   const [debouncedSearch, setDebouncedSearch] = useState(search);
 
   const { user, getToken, API_URL } = useAuth();
-  const { refreshCart } = useCart(); // [!code ++]
+  const { refreshCart } = useCart();
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -60,7 +61,11 @@ export default function Products() {
     setLoading(true);
     try {
       const token = getToken();
-      const headers: any = { "Content-Type": "application/json" };
+      // [!code ++] Added ClientId
+      const headers: any = {
+        "Content-Type": "application/json",
+        ClientId: getClientId(),
+      };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       let url = "";
@@ -117,6 +122,7 @@ export default function Products() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(), // [!code ++] Added ClientId
         },
         body: JSON.stringify({
           productId: product.id,
@@ -129,7 +135,7 @@ export default function Products() {
           title: "Added to cart!",
           description: `${product.name} added.`,
         });
-        refreshCart(); // [!code ++] Update header immediately
+        refreshCart();
       }
     } catch (error) {
       toast({
@@ -140,9 +146,9 @@ export default function Products() {
     }
   };
 
-  // ... (Rest of UI remains the same)
   return (
     <div className="space-y-8 animate-fade-in">
+      {/* ... UI Remains Exactly the Same ... */}
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Latest Products</h1>
         <p className="text-muted-foreground">
@@ -151,7 +157,6 @@ export default function Products() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">
-        {/* Search Bar */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -162,7 +167,6 @@ export default function Products() {
           />
         </div>
 
-        {/* Category Filter */}
         <div className="w-full sm:w-[200px]">
           <Select
             value={selectedCategory}
@@ -246,7 +250,6 @@ export default function Products() {
             </div>
           )}
 
-          {/* Pagination Controls */}
           {debouncedSearch === "" && products.length > 0 && (
             <div className="flex justify-center items-center gap-4 py-8">
               <Button

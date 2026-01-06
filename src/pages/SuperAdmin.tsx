@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Search, Trash2, UserCheck, UserX, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
+import { getClientId } from "@/lib/clientId"; // [!code ++]
 
 interface Admin {
   id: number;
@@ -47,9 +48,11 @@ export default function SuperAdmin() {
 
   const fetchAdmins = async () => {
     try {
-      // FIX: Use /auth (lowercase)
       const res = await fetch(`${API_URL}/auth/admins`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(), // [!code ++]
+        },
       });
       if (res.ok) {
         const data = await res.json();
@@ -74,12 +77,12 @@ export default function SuperAdmin() {
 
     setIsSubmitting(true);
     try {
-      // FIX: Use /auth (lowercase)
       const res = await fetch(`${API_URL}/auth/register-admin`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(), // [!code ++]
         },
         body: JSON.stringify(form),
       });
@@ -116,10 +119,12 @@ export default function SuperAdmin() {
   const handleDelete = async (admin: Admin) => {
     if (confirm(`Delete admin "${admin.username}"?`)) {
       try {
-        // FIX: Use /auth (lowercase)
         const res = await fetch(`${API_URL}/auth/${admin.id}`, {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${getToken()}` },
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+            ClientId: getClientId(), // [!code ++]
+          },
         });
 
         if (res.ok) {
@@ -141,12 +146,12 @@ export default function SuperAdmin() {
     };
 
     try {
-      // FIX: Use /auth (lowercase)
       const res = await fetch(`${API_URL}/auth/${admin.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(), // [!code ++]
         },
         body: JSON.stringify(updateRequest),
       });
@@ -176,6 +181,7 @@ export default function SuperAdmin() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* ... (Rest of UI remains identical) ... */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">

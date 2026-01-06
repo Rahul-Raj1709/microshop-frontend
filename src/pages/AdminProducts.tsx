@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
+import { getClientId } from "@/lib/clientId"; // [!code ++]
 
 interface Product {
   id: number;
@@ -29,8 +30,8 @@ interface Product {
   price: number;
   stock: number;
   seller_id: number;
-  category: string; // New Field
-  description: string; // New Field
+  category: string;
+  description: string;
 }
 
 export default function AdminProducts() {
@@ -38,7 +39,6 @@ export default function AdminProducts() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState(search);
 
-  // Pagination State
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
@@ -48,7 +48,6 @@ export default function AdminProducts() {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Initial Form State
   const [form, setForm] = useState<Product>({
     id: 0,
     name: "",
@@ -61,7 +60,6 @@ export default function AdminProducts() {
 
   const { getToken, API_URL } = useAuth();
 
-  // Debounce Logic: Wait 500ms after typing stops before updating debouncedSearch
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(search);
@@ -69,7 +67,6 @@ export default function AdminProducts() {
     return () => clearTimeout(handler);
   }, [search]);
 
-  // Fetch when Page changes OR Search term changes
   useEffect(() => {
     fetchProducts();
   }, [page, debouncedSearch]);
@@ -77,27 +74,25 @@ export default function AdminProducts() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const headers = { Authorization: `Bearer ${getToken()}` };
+      const headers = {
+        Authorization: `Bearer ${getToken()}`,
+        ClientId: getClientId(), // [!code ++] Added ClientId
+      };
       let url = "";
 
-      // 1. If Searching, use the Elastic Search Endpoint
       if (debouncedSearch.length > 0) {
         url = `${API_URL}/product/search?q=${encodeURIComponent(
           debouncedSearch
         )}`;
-      }
-      // 2. If NOT searching, use the standard DB Pagination
-      else {
+      } else {
         url = `${API_URL}/product?page=${page}&pageSize=${pageSize}`;
       }
 
       const res = await fetch(url, { headers });
       const data = await res.json();
 
-      // Handle different structures (Search returns Array, DB returns Paged Object)
       if (Array.isArray(data)) {
         setProducts(data);
-        // Elastic search in this simple setup returns a flat list, so we disable pagination controls
         setTotalCount(data.length);
         setTotalPages(1);
       } else if (data.items) {
@@ -120,6 +115,7 @@ export default function AdminProducts() {
       const headers = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${getToken()}`,
+        ClientId: getClientId(), // [!code ++] Added ClientId
       };
 
       const body = JSON.stringify({
@@ -162,7 +158,10 @@ export default function AdminProducts() {
       try {
         const res = await fetch(`${API_URL}/product/${product.id}`, {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${getToken()}` },
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+            ClientId: getClientId(), // [!code ++] Added ClientId
+          },
         });
         if (res.ok) {
           fetchProducts();
@@ -229,7 +228,7 @@ export default function AdminProducts() {
             columns={[
               { header: "ID", accessorKey: "id", className: "w-12 font-mono" },
               { header: "Name", accessorKey: "name", className: "font-medium" },
-              { header: "Category", accessorKey: "category" }, // New Column
+              { header: "Category", accessorKey: "category" },
               {
                 header: "Price",
                 accessorKey: (row) => `$${row.price.toFixed(2)}`,
@@ -257,12 +256,10 @@ export default function AdminProducts() {
                 className: "text-right",
               },
             ]}
-            // FIX: Pass 'products' directly. Do NOT filter client-side.
             data={products}
             emptyMessage="No products found."
           />
 
-          {/* Pagination Controls (Hide if searching, as Elastic returns all matches) */}
           {debouncedSearch === "" && (
             <div className="flex items-center justify-end space-x-2 py-4">
               <div className="text-sm text-muted-foreground mr-4">
@@ -287,7 +284,6 @@ export default function AdminProducts() {
         </>
       )}
 
-      {/* Add/Edit Modal */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -296,7 +292,6 @@ export default function AdminProducts() {
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            {/* Name */}
             <div className="grid gap-2">
               <Label htmlFor="name">Product Name</Label>
               <Input
@@ -305,8 +300,6 @@ export default function AdminProducts() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </div>
-
-            {/* Category (New) */}
             <div className="grid gap-2">
               <Label htmlFor="category">Category</Label>
               <Input
@@ -316,8 +309,6 @@ export default function AdminProducts() {
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
               />
             </div>
-
-            {/* Description (New) */}
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
               <Textarea
@@ -329,8 +320,6 @@ export default function AdminProducts() {
                 }
               />
             </div>
-
-            {/* Price & Stock */}
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="price">Price ($)</Label>

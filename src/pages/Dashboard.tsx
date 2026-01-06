@@ -13,14 +13,14 @@ import {
   TrendingUp,
   ArrowUpRight,
 } from "lucide-react";
+import { getClientId } from "@/lib/clientId";
+import { useNavigate } from "react-router-dom";
 
-// 1. Define API Interfaces
 interface TopProductAPI {
   name: string;
   sales: number;
   revenue: number;
 }
-
 interface RecentOrder {
   id: number;
   customer: string;
@@ -28,7 +28,6 @@ interface RecentOrder {
   amount: number;
   status: string;
 }
-
 interface DashboardStats {
   totalRevenue: number;
   totalOrders: number;
@@ -36,12 +35,9 @@ interface DashboardStats {
   topProducts: TopProductAPI[];
   recentOrders: RecentOrder[];
 }
-
-// 2. Define Table Row Interface (Extends API with ID)
 interface TopProductRow extends TopProductAPI {
   id: string | number;
 }
-
 const salesData = [
   { name: "Jan", value: 4000 },
   { name: "Feb", value: 3000 },
@@ -56,18 +52,24 @@ export default function Dashboard() {
   const { user, getToken, API_URL } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate(); // [!code ++]
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         const token = getToken();
-        // Ensure this URL matches your Ocelot Upstream path
         const response = await fetch(`${API_URL}/dashboard`, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
+            ClientId: getClientId(),
           },
         });
+
+        if (response.status === 429) {
+          navigate("/too-many-requests");
+          return;
+        }
 
         if (response.ok) {
           const data = await response.json();
@@ -83,7 +85,7 @@ export default function Dashboard() {
     };
 
     fetchDashboardData();
-  }, [API_URL, getToken]);
+  }, [API_URL, getToken, navigate]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -106,12 +108,10 @@ export default function Dashboard() {
     return <Badge variant={variants[status] || "outline"}>{status}</Badge>;
   };
 
-  // 3. Prepare data for DataTable (Add IDs)
-  // We use the index as ID because top products are just an aggregated list
   const tableTopProducts: TopProductRow[] =
     stats?.topProducts.map((p, i) => ({
       ...p,
-      id: i, // Synthetic ID to satisfy DataTable requirement
+      id: i,
     })) || [];
 
   if (loading) {
@@ -120,11 +120,10 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Welcome back, {user?.username}
+            Welcome back, {user?.name}
           </h1>
           <p className="text-muted-foreground">
             Here's what's happening with your store today.
@@ -136,7 +135,6 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* Metrics Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Total Revenue"
@@ -168,7 +166,6 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Charts & Tables */}
       <div className="grid gap-6 lg:grid-cols-2">
         <ChartCard title="Revenue Overview" data={salesData} />
 
@@ -179,7 +176,6 @@ export default function Dashboard() {
               View All <ArrowUpRight className="h-3 w-3" />
             </Button>
           </div>
-          {/* Passed tableTopProducts which now has IDs */}
           <DataTable
             columns={[
               { header: "Product", accessorKey: "name" },
@@ -200,7 +196,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Recent Orders */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Recent Orders</h2>
