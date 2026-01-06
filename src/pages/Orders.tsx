@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Package, Calendar } from "lucide-react";
-import { getClientId } from "@/lib/clientId"; // [!code ++]
+import { getClientId } from "@/lib/clientId";
 
 interface Order {
   id: number;
@@ -17,6 +17,7 @@ interface Order {
 export default function Orders() {
   const { user, getToken, API_URL } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
+  const navigate = useNavigate();
 
   if (!user) return <Navigate to="/login" replace />;
 
@@ -29,9 +30,15 @@ export default function Orders() {
       const res = await fetch(`${API_URL}/order/history`, {
         headers: {
           Authorization: `Bearer ${getToken()}`,
-          ClientId: getClientId(), // [!code ++] Added ClientId
+          ClientId: getClientId(),
         },
       });
+
+      if (res.status === 429) {
+        navigate("/too-many-requests");
+        return;
+      }
+
       if (res.ok) {
         const data = await res.json();
         setOrders(data);

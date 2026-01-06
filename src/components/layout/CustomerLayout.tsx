@@ -19,6 +19,7 @@ import {
   Moon,
   Package,
   Menu,
+  Settings, // [!code ++] Added Settings Icon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -120,9 +121,15 @@ export function CustomerLayout() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem>
+                  {/* [!code ++] Wired up onClick */}
+                  <DropdownMenuItem onClick={() => navigate("/profile")}>
                     <User className="mr-2 h-4 w-4" />
                     Profile
+                  </DropdownMenuItem>
+                  {/* [!code ++] Added Settings Item */}
+                  <DropdownMenuItem onClick={() => navigate("/settings")}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
                   </DropdownMenuItem>
                   {!isManager && (
                     <DropdownMenuItem onClick={() => navigate("/orders")}>
@@ -130,7 +137,6 @@ export function CustomerLayout() {
                       My Orders
                     </DropdownMenuItem>
                   )}
-                  {/* FIX: Add navigation to the logout click handler */}
                   <DropdownMenuItem
                     onClick={() => {
                       logout();

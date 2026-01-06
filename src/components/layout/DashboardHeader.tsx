@@ -103,7 +103,6 @@ export function DashboardHeader({
 
         if (response.ok) {
           const data = await response.json();
-          // Handle both array (Elastic) and PagedList (DB) structures
           const items = Array.isArray(data) ? data : data.items || [];
           setResults(items);
           setShowResults(true);
@@ -118,7 +117,6 @@ export function DashboardHeader({
     fetchSearchResults();
   }, [debouncedQuery, API_URL, getToken]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -134,11 +132,14 @@ export function DashboardHeader({
 
   const handleResultClick = (product: SearchResult) => {
     setShowResults(false);
-    setQuery(""); // Clear search
-    // Navigate to Admin Products page with filter (optional implementation) or just log
-    // For now, we can navigate to the admin products page
+    setQuery("");
     navigate("/admin/products");
   };
+
+  // [!code ++] Helper to get correct routes based on role
+  const isCustomer = user?.role === "Customer";
+  const profileLink = isCustomer ? "/profile" : "/admin/profile";
+  const settingsLink = isCustomer ? "/settings" : "/admin/settings";
 
   return (
     <header
@@ -302,11 +303,13 @@ export function DashboardHeader({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            {/* [!code ++] Updated Links to use dynamic path */}
+            <DropdownMenuItem onClick={() => navigate(profileLink)}>
               <User className="mr-2 h-4 w-4" />
               Profile
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            {/* [!code ++] Updated Links to use dynamic path */}
+            <DropdownMenuItem onClick={() => navigate(settingsLink)}>
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </DropdownMenuItem>

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { Trash2, ShoppingBag, ArrowRight, Plus, Minus } from "lucide-react";
-import { getClientId } from "@/lib/clientId"; // [!code ++]
+import { getClientId } from "@/lib/clientId";
 
 interface CartItem {
   productId: number;
@@ -39,9 +39,15 @@ export default function Cart() {
       const res = await fetch(`${API_URL}/cart`, {
         headers: {
           Authorization: `Bearer ${getToken()}`,
-          ClientId: getClientId(), // [!code ++]
+          ClientId: getClientId(),
         },
       });
+
+      if (res.status === 429) {
+        navigate("/too-many-requests");
+        return;
+      }
+
       if (res.ok) {
         const data = await res.json();
         setCart(
@@ -69,7 +75,7 @@ export default function Cart() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
-          ClientId: getClientId(), // [!code ++]
+          ClientId: getClientId(),
         },
         body: JSON.stringify({
           productId: item.productId,
@@ -77,6 +83,11 @@ export default function Cart() {
           quantity: newQuantity,
         }),
       });
+
+      if (res.status === 429) {
+        navigate("/too-many-requests");
+        return;
+      }
 
       if (res.ok) {
         setCart((prev) =>
@@ -108,9 +119,14 @@ export default function Cart() {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${getToken()}`,
-          ClientId: getClientId(), // [!code ++]
+          ClientId: getClientId(),
         },
       });
+
+      if (res.status === 429) {
+        navigate("/too-many-requests");
+        return;
+      }
 
       if (res.ok) {
         setCart((prev) => prev.filter((c) => c.productId !== productId));
@@ -141,9 +157,14 @@ export default function Cart() {
         method: "POST",
         headers: {
           Authorization: `Bearer ${getToken()}`,
-          ClientId: getClientId(), // [!code ++]
+          ClientId: getClientId(),
         },
       });
+
+      if (res.status === 429) {
+        navigate("/too-many-requests");
+        return;
+      }
 
       if (res.ok) {
         toast({

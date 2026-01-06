@@ -22,7 +22,8 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
-import { getClientId } from "@/lib/clientId"; // [!code ++]
+import { getClientId } from "@/lib/clientId";
+import { useNavigate } from "react-router-dom";
 
 interface Product {
   id: number;
@@ -59,6 +60,7 @@ export default function AdminProducts() {
   });
 
   const { getToken, API_URL } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -76,7 +78,7 @@ export default function AdminProducts() {
     try {
       const headers = {
         Authorization: `Bearer ${getToken()}`,
-        ClientId: getClientId(), // [!code ++] Added ClientId
+        ClientId: getClientId(),
       };
       let url = "";
 
@@ -89,6 +91,12 @@ export default function AdminProducts() {
       }
 
       const res = await fetch(url, { headers });
+
+      if (res.status === 429) {
+        navigate("/too-many-requests");
+        return;
+      }
+
       const data = await res.json();
 
       if (Array.isArray(data)) {
@@ -115,7 +123,7 @@ export default function AdminProducts() {
       const headers = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${getToken()}`,
-        ClientId: getClientId(), // [!code ++] Added ClientId
+        ClientId: getClientId(),
       };
 
       const body = JSON.stringify({
@@ -130,6 +138,12 @@ export default function AdminProducts() {
           headers,
           body,
         });
+
+        if (res.status === 429) {
+          navigate("/too-many-requests");
+          return;
+        }
+
         if (!res.ok) throw new Error("Update failed");
         toast({ title: "Product Updated" });
       } else {
@@ -138,6 +152,12 @@ export default function AdminProducts() {
           headers,
           body,
         });
+
+        if (res.status === 429) {
+          navigate("/too-many-requests");
+          return;
+        }
+
         if (!res.ok) throw new Error("Creation failed");
         toast({ title: "Product Created" });
       }
@@ -160,9 +180,15 @@ export default function AdminProducts() {
           method: "DELETE",
           headers: {
             Authorization: `Bearer ${getToken()}`,
-            ClientId: getClientId(), // [!code ++] Added ClientId
+            ClientId: getClientId(),
           },
         });
+
+        if (res.status === 429) {
+          navigate("/too-many-requests");
+          return;
+        }
+
         if (res.ok) {
           fetchProducts();
           toast({ title: "Product deleted", variant: "destructive" });
