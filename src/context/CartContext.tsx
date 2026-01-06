@@ -6,6 +6,7 @@ import {
   ReactNode,
 } from "react";
 import { useAuth } from "./AuthContext";
+import { getClientId } from "../lib/clientId";
 
 type CartContextType = {
   cartCount: number;
@@ -28,7 +29,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     try {
       const token = getToken();
       const res = await fetch(`${API_URL}/cart`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ClientId: getClientId(), // <--- Add this
+        },
       });
 
       if (res.ok) {

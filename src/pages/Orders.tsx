@@ -3,14 +3,8 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Package,
-  Calendar,
-  CheckCircle,
-  Truck,
-  Clock,
-  AlertCircle,
-} from "lucide-react";
+import { Package, Calendar } from "lucide-react";
+import { getClientId } from "@/lib/clientId"; // [!code ++]
 
 interface Order {
   id: number;
@@ -33,7 +27,10 @@ export default function Orders() {
   const fetchOrders = async () => {
     try {
       const res = await fetch(`${API_URL}/order/history`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(), // [!code ++] Added ClientId
+        },
       });
       if (res.ok) {
         const data = await res.json();

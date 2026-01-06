@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { useCart } from "@/context/CartContext"; // [!code ++]
+import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { Trash2, ShoppingBag, ArrowRight, Plus, Minus } from "lucide-react";
+import { getClientId } from "@/lib/clientId"; // [!code ++]
 
 interface CartItem {
   productId: number;
@@ -24,7 +25,7 @@ interface CartItem {
 export default function Cart() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const { user, getToken, API_URL } = useAuth();
-  const { refreshCart } = useCart(); // [!code ++] Get the global refresh function
+  const { refreshCart } = useCart();
   const navigate = useNavigate();
 
   if (!user) return <Navigate to="/login" replace />;
@@ -36,7 +37,10 @@ export default function Cart() {
   const fetchCart = async () => {
     try {
       const res = await fetch(`${API_URL}/cart`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(), // [!code ++]
+        },
       });
       if (res.ok) {
         const data = await res.json();
@@ -48,8 +52,7 @@ export default function Cart() {
               "https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=100&h=100&fit=crop",
           }))
         );
-        // Ensure global count is in sync with what we just fetched
-        refreshCart(); // [!code ++]
+        refreshCart();
       }
     } catch (err) {
       console.error(err);
@@ -66,6 +69,7 @@ export default function Cart() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(), // [!code ++]
         },
         body: JSON.stringify({
           productId: item.productId,
@@ -80,8 +84,7 @@ export default function Cart() {
             c.productId === item.productId ? { ...c, quantity: newQuantity } : c
           )
         );
-        // Refresh the global badge count
-        refreshCart(); // [!code ++]
+        refreshCart();
       } else {
         toast({
           title: "Update failed",
@@ -103,7 +106,10 @@ export default function Cart() {
     try {
       const res = await fetch(`${API_URL}/cart/${productId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${getToken()}` },
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(), // [!code ++]
+        },
       });
 
       if (res.ok) {
@@ -112,8 +118,7 @@ export default function Cart() {
           title: "Item removed",
           description: "Item removed from cart.",
         });
-        // Refresh the global badge count
-        refreshCart(); // [!code ++]
+        refreshCart();
       } else {
         toast({
           title: "Remove failed",
@@ -134,7 +139,10 @@ export default function Cart() {
     try {
       const res = await fetch(`${API_URL}/cart/checkout`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${getToken()}` },
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(), // [!code ++]
+        },
       });
 
       if (res.ok) {
@@ -143,7 +151,7 @@ export default function Cart() {
           description: "Redirecting to orders...",
         });
         setCart([]);
-        refreshCart(); // [!code ++] Clear the badge to 0
+        refreshCart();
         setTimeout(() => navigate("/orders"), 1500);
       } else {
         toast({
