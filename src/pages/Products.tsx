@@ -22,7 +22,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
-import { getClientId } from "@/lib/clientId"; // [!code ++]
+import { getClientId } from "@/lib/clientId";
+import { useNavigate } from "react-router-dom";
 
 interface Product {
   id: number;
@@ -45,6 +46,7 @@ export default function Products() {
 
   const { user, getToken, API_URL } = useAuth();
   const { refreshCart } = useCart();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -61,7 +63,6 @@ export default function Products() {
     setLoading(true);
     try {
       const token = getToken();
-      // [!code ++] Added ClientId
       const headers: any = {
         "Content-Type": "application/json",
         ClientId: getClientId(),
@@ -82,6 +83,12 @@ export default function Products() {
       }
 
       const res = await fetch(url, { headers });
+
+      if (res.status === 429) {
+        navigate("/too-many-requests");
+        return;
+      }
+
       if (!res.ok) throw new Error("Failed to fetch products");
 
       const data = await res.json();
@@ -122,7 +129,7 @@ export default function Products() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
-          ClientId: getClientId(), // [!code ++] Added ClientId
+          ClientId: getClientId(),
         },
         body: JSON.stringify({
           productId: product.id,
@@ -130,6 +137,12 @@ export default function Products() {
           quantity: 1,
         }),
       });
+
+      if (res.status === 429) {
+        navigate("/too-many-requests");
+        return;
+      }
+
       if (res.ok) {
         toast({
           title: "Added to cart!",
@@ -148,7 +161,6 @@ export default function Products() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* ... UI Remains Exactly the Same ... */}
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Latest Products</h1>
         <p className="text-muted-foreground">

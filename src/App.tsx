@@ -20,7 +20,9 @@ import Products from "@/pages/Products";
 import Cart from "@/pages/Cart";
 import Orders from "@/pages/Orders";
 import NotFound from "@/pages/NotFound";
-import TooManyRequests from "@/pages/TooManyRequests"; // [!code ++]
+import TooManyRequests from "@/pages/TooManyRequests";
+import Profile from "@/pages/Profile";
+import Settings from "@/pages/Settings"; // [!code ++]
 
 const queryClient = new QueryClient();
 
@@ -38,10 +40,11 @@ const App = () => (
                 <Route
                   path="/too-many-requests"
                   element={<TooManyRequests />}
-                />{" "}
-                {/* [!code ++] */}
+                />
+
                 {/* Auth */}
                 <Route path="/login" element={<Login />} />
+
                 {/* Admin Routes */}
                 <Route element={<DashboardLayout />}>
                   <Route path="/dashboard" element={<Dashboard />} />
@@ -49,15 +52,24 @@ const App = () => (
                   <Route path="/admin/orders" element={<NotFound />} />
                   <Route path="/admin/users" element={<NotFound />} />
                   <Route path="/admin/reports" element={<NotFound />} />
-                  <Route path="/admin/settings" element={<NotFound />} />
+
+                  {/* [!code ++] Admin/SuperAdmin Settings */}
+                  <Route path="/admin/settings" element={<Settings />} />
+                  <Route path="/admin/profile" element={<Profile />} />
                   <Route path="/super-admin" element={<SuperAdmin />} />
                 </Route>
+
                 {/* Customer Routes */}
                 <Route element={<CustomerLayout />}>
                   <Route path="/" element={<Products />} />
                   <Route path="/cart" element={<Cart />} />
                   <Route path="/orders" element={<Orders />} />
+
+                  {/* [!code ++] Customer Settings */}
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/settings" element={<Settings />} />
                 </Route>
+
                 {/* Catch-all */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
