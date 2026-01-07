@@ -14,10 +14,15 @@ export function DashboardLayout() {
     const handleResize = () => {
       if (window.innerWidth < 1024) {
         setSidebarCollapsed(true);
+      } else {
+        // Optional: Auto-expand on large screens if desired
+        setSidebarCollapsed(false);
       }
     };
-    
+
+    // Initial check
     handleResize();
+
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -41,12 +46,17 @@ export function DashboardLayout() {
 
   return (
     <div className="min-h-screen bg-background transition-theme">
-      <DashboardSidebar />
+      {/* Pass the state and the setter to the sidebar */}
+      <DashboardSidebar
+        collapsed={sidebarCollapsed}
+        setCollapsed={setSidebarCollapsed}
+      />
+
       <DashboardHeader sidebarCollapsed={sidebarCollapsed} />
+
       <main
         className="pt-16 transition-all duration-300"
-        style={{ marginLeft: sidebarCollapsed ? "64px" : "256px" }}
-      >
+        style={{ marginLeft: sidebarCollapsed ? "64px" : "256px" }}>
         <div className="p-6">
           <Outlet />
         </div>
