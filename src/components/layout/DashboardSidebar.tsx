@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
@@ -69,8 +68,17 @@ const navItems: NavItem[] = [
   },
 ];
 
-export function DashboardSidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+// Add props interface
+interface DashboardSidebarProps {
+  collapsed: boolean;
+  setCollapsed: (collapsed: boolean) => void;
+}
+
+// Accept props instead of using local state
+export function DashboardSidebar({
+  collapsed,
+  setCollapsed,
+}: DashboardSidebarProps) {
   const { user, logout } = useAuth();
   const location = useLocation();
 
@@ -150,7 +158,6 @@ export function DashboardSidebar() {
         <div className="border-t border-sidebar-border p-3">
           {!collapsed && user && (
             <div className="mb-3 rounded-lg bg-sidebar-accent p-3">
-              {/* UPDATED: Shows Name instead of Username */}
               <p className="text-sm font-medium text-sidebar-accent-foreground">
                 {user.name || user.username}
               </p>
