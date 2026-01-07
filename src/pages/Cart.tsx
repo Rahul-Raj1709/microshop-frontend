@@ -9,9 +9,19 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { Trash2, ShoppingBag, ArrowRight, Plus, Minus } from "lucide-react";
+import {
+  Trash2,
+  ShoppingBag,
+  ArrowRight,
+  Plus,
+  Minus,
+  MapPin,
+} from "lucide-react";
 import { getClientId } from "@/lib/clientId";
 
 interface CartItem {
@@ -22,8 +32,18 @@ interface CartItem {
   image?: string;
 }
 
+interface SavedAddress {
+  id: string;
+  label: string;
+  value: string;
+}
+
 export default function Cart() {
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [addresses, setAddresses] = useState<SavedAddress[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<string>("");
+  const [loadingAddress, setLoadingAddress] = useState(true);
+
   const { user, getToken, API_URL } = useAuth();
   const { refreshCart } = useCart();
   const navigate = useNavigate();
@@ -32,6 +52,7 @@ export default function Cart() {
 
   useEffect(() => {
     fetchCart();
+    fetchAddresses();
   }, []);
 
   const fetchCart = async () => {
@@ -42,12 +63,6 @@ export default function Cart() {
           ClientId: getClientId(),
         },
       });
-
-      if (res.status === 429) {
-        navigate("/too-many-requests");
-        return;
-      }
-
       if (res.ok) {
         const data = await res.json();
         setCart(
@@ -62,6 +77,43 @@ export default function Cart() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const fetchAddresses = async () => {
+    try {
+      const res = await fetch(`${API_URL}/user/profile`, {
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(),
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+
+        // Extract addresses from profileData or use default shipping if no list
+        const saved: SavedAddress[] = data.profileData?.savedAddresses || [];
+
+        // If there's a default shipping address but no saved list, add it as "Default"
+        if (saved.length === 0 && data.profileData?.shippingAddress) {
+          saved.push({
+            id: "default",
+            label: "Default Shipping",
+            value: data.profileData.shippingAddress,
+          });
+        }
+
+        setAddresses(saved);
+
+        // Auto-select the first one
+        if (saved.length > 0) {
+          setSelectedAddress(saved[0].value);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load addresses");
+    } finally {
+      setLoadingAddress(false);
     }
   };
 
@@ -84,11 +136,6 @@ export default function Cart() {
         }),
       });
 
-      if (res.status === 429) {
-        navigate("/too-many-requests");
-        return;
-      }
-
       if (res.ok) {
         setCart((prev) =>
           prev.map((c) =>
@@ -96,20 +143,9 @@ export default function Cart() {
           )
         );
         refreshCart();
-      } else {
-        toast({
-          title: "Update failed",
-          description: "Could not update cart quantity.",
-          variant: "destructive",
-        });
       }
     } catch (err) {
       console.error(err);
-      toast({
-        title: "Error",
-        description: "Something went wrong.",
-        variant: "destructive",
-      });
     }
   };
 
@@ -122,49 +158,37 @@ export default function Cart() {
           ClientId: getClientId(),
         },
       });
-
-      if (res.status === 429) {
-        navigate("/too-many-requests");
-        return;
-      }
-
       if (res.ok) {
         setCart((prev) => prev.filter((c) => c.productId !== productId));
-        toast({
-          title: "Item removed",
-          description: "Item removed from cart.",
-        });
+        toast({ title: "Item removed" });
         refreshCart();
-      } else {
-        toast({
-          title: "Remove failed",
-          variant: "destructive",
-        });
       }
     } catch (err) {
       console.error(err);
-      toast({
-        title: "Error",
-        description: "Could not remove item.",
-        variant: "destructive",
-      });
     }
   };
 
   const handleCheckout = async () => {
+    if (!selectedAddress) {
+      toast({
+        title: "Address Required",
+        description: "Please select a shipping address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
+      // Pass the selected address in the body
       const res = await fetch(`${API_URL}/cart/checkout`, {
         method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
           ClientId: getClientId(),
         },
+        body: JSON.stringify({ shippingAddress: selectedAddress }),
       });
-
-      if (res.status === 429) {
-        navigate("/too-many-requests");
-        return;
-      }
 
       if (res.ok) {
         toast({
@@ -206,6 +230,7 @@ export default function Cart() {
     <div className="animate-fade-in">
       <h1 className="mb-8 text-3xl font-bold tracking-tight">Shopping Cart</h1>
       <div className="grid gap-8 lg:grid-cols-3">
+        {/* Cart Items */}
         <div className="space-y-4 lg:col-span-2">
           {cart.map((item) => (
             <Card key={item.productId}>
@@ -251,22 +276,84 @@ export default function Cart() {
           ))}
         </div>
 
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle>Checkout</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex justify-between font-medium">
-              <span>Total Items</span>
-              <span>{cart.reduce((acc, item) => acc + item.quantity, 0)}</span>
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button className="w-full gap-2" size="lg" onClick={handleCheckout}>
-              Checkout <ArrowRight className="h-4 w-4" />
-            </Button>
-          </CardFooter>
-        </Card>
+        {/* Checkout & Address Section */}
+        <div className="space-y-6">
+          {/* Address Selector */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" /> Shipping Address
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingAddress ? (
+                <p className="text-sm text-muted-foreground">
+                  Loading addresses...
+                </p>
+              ) : addresses.length === 0 ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    No saved addresses.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate("/dashboard/profile")}>
+                    Add Address in Profile
+                  </Button>
+                </div>
+              ) : (
+                <RadioGroup
+                  value={selectedAddress}
+                  onValueChange={setSelectedAddress}>
+                  {addresses.map((addr) => (
+                    <div
+                      key={addr.id}
+                      className="flex items-start space-x-2 border p-3 rounded-md">
+                      <RadioGroupItem
+                        value={addr.value}
+                        id={addr.id}
+                        className="mt-1"
+                      />
+                      <Label
+                        htmlFor={addr.id}
+                        className="cursor-pointer grid gap-1">
+                        <span className="font-semibold">{addr.label}</span>
+                        <span className="text-xs text-muted-foreground leading-snug">
+                          {addr.value}
+                        </span>
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Checkout Summary */}
+          <Card className="h-fit">
+            <CardHeader>
+              <CardTitle>Checkout Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex justify-between font-medium">
+                <span>Total Items</span>
+                <span>
+                  {cart.reduce((acc, item) => acc + item.quantity, 0)}
+                </span>
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button
+                className="w-full gap-2"
+                size="lg"
+                onClick={handleCheckout}
+                disabled={!selectedAddress}>
+                Checkout <ArrowRight className="h-4 w-4" />
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
       </div>
     </div>
   );
