@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Badge } from "@/components/ui/badge";
@@ -20,11 +20,24 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Package, Calendar, Star, User, Mail, DollarSign } from "lucide-react";
+import {
+  Package,
+  Calendar,
+  Star,
+  User,
+  Mail,
+  DollarSign,
+  Loader2,
+} from "lucide-react";
 import { getClientId } from "@/lib/clientId";
 import { toast } from "sonner";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 
-// Interface for the list view
 interface OrderSummary {
   id: number;
   productName: string;
@@ -36,7 +49,6 @@ interface OrderSummary {
   totalAmount: number;
 }
 
-// Extended interface for the Details Modal (includes Seller info)
 interface OrderDetail extends OrderSummary {
   sellerName: string;
   sellerEmail: string;
@@ -45,19 +57,14 @@ interface OrderDetail extends OrderSummary {
 export default function Orders() {
   const { user, getToken, API_URL } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  // --- State: Data & Pagination ---
-  const [orders, setOrders] = useState<OrderSummary[]>([]);
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [selectedYear, setSelectedYear] = useState<string>("all");
 
-  // --- State: Order Details Modal ---
+  // Modal State
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null);
-
-  // --- State: Feedback Modal ---
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [feedbackOrderId, setFeedbackOrderId] = useState<number | null>(null);
   const [rating, setRating] = useState(5);
@@ -65,14 +72,10 @@ export default function Orders() {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  useEffect(() => {
-    fetchOrders();
-  }, [page, selectedYear]);
-
-  // 1. Fetch List of Orders (Paginated)
-  const fetchOrders = async () => {
-    setLoading(true);
-    try {
+  // --- 1. Fetch Orders ---
+  const { data, isLoading } = useQuery({
+    queryKey: ["orders", page, selectedYear],
+    queryFn: async () => {
       const yearQuery = selectedYear !== "all" ? `&year=${selectedYear}` : "";
       const res = await fetch(
         `${API_URL}/order/history?page=${page}&pageSize=5${yearQuery}`,
@@ -86,55 +89,20 @@ export default function Orders() {
 
       if (res.status === 429) {
         navigate("/too-many-requests");
-        return;
+        throw new Error("Too many requests");
       }
+      return res.json();
+    },
+    placeholderData: keepPreviousData,
+  });
 
-      if (res.ok) {
-        const data = await res.json();
-        setOrders(data.orders);
-        setTotalPages(Math.ceil(data.totalCount / 5));
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const orders: OrderSummary[] = data?.orders || [];
+  const totalPages = data ? Math.ceil(data.totalCount / 5) : 1;
 
-  // 2. Fetch Single Order Details (For Details Modal)
-  const handleOrderClick = async (orderId: number) => {
-    try {
-      const res = await fetch(`${API_URL}/order/${orderId}`, {
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-          ClientId: getClientId(),
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setSelectedOrder(data);
-        setIsDetailsOpen(true);
-      }
-    } catch (err) {
-      console.error("Failed to fetch order details", err);
-      toast.error("Could not load order details.");
-    }
-  };
-
-  // 3. Open Feedback Modal (Prevents opening Details modal)
-  const handleOpenFeedback = (e: React.MouseEvent, order: OrderSummary) => {
-    e.stopPropagation();
-    setFeedbackOrderId(order.id);
-    setRating(order.rating || 5);
-    setComment(order.feedback || "");
-    setIsFeedbackOpen(true);
-  };
-
-  // 4. Submit Feedback
-  const submitFeedback = async () => {
-    if (!feedbackOrderId) return;
-    try {
+  // --- 2. Feedback Mutation ---
+  const feedbackMutation = useMutation({
+    mutationFn: async () => {
+      if (!feedbackOrderId) return;
       const res = await fetch(`${API_URL}/order/${feedbackOrderId}/feedback`, {
         method: "POST",
         headers: {
@@ -144,25 +112,48 @@ export default function Orders() {
         },
         body: JSON.stringify({ rating, feedback: comment }),
       });
+      if (!res.ok) throw new Error("Failed to submit");
+      return res;
+    },
+    onSuccess: () => {
+      toast.success("Feedback submitted!");
+      setIsFeedbackOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["orders"] }); // Refresh list to show stars
+    },
+    onError: () => toast.error("Failed to submit feedback"),
+  });
 
+  // --- 3. Handlers ---
+  const handleOrderClick = async (orderId: number) => {
+    try {
+      const res = await fetch(`${API_URL}/order/${orderId}`, {
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(),
+        },
+      });
       if (res.ok) {
-        toast.success("Feedback submitted!");
-        setIsFeedbackOpen(false);
-        fetchOrders(); // Refresh list to update stars in the UI
-      } else {
-        toast.error("Failed to submit feedback");
+        const data = await res.json();
+        setSelectedOrder(data);
+        setIsDetailsOpen(true);
       }
     } catch (err) {
-      console.error(err);
+      toast.error("Could not load order details.");
     }
+  };
+
+  const handleOpenFeedback = (e: React.MouseEvent, order: OrderSummary) => {
+    e.stopPropagation();
+    setFeedbackOrderId(order.id);
+    setRating(order.rating || 5);
+    setComment(order.feedback || "");
+    setIsFeedbackOpen(true);
   };
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
-      {/* --- Header & Filters --- */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-3xl font-bold tracking-tight">My Order History</h1>
-
         <Select
           value={selectedYear}
           onValueChange={(val) => {
@@ -180,19 +171,18 @@ export default function Orders() {
         </Select>
       </div>
 
-      {/* --- Order List --- */}
       <div className="space-y-4">
-        {loading ? (
-          <p>Loading orders...</p>
+        {isLoading ? (
+          <div className="flex justify-center p-8">
+            <Loader2 className="animate-spin" />
+          </div>
         ) : (
           orders.map((order) => (
             <Card
               key={order.id}
               className="transition-all hover:shadow-md cursor-pointer hover:border-primary/50"
-              onClick={() => handleOrderClick(order.id)} // Opens Details Modal
-            >
+              onClick={() => handleOrderClick(order.id)}>
               <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
-                {/* Product Info */}
                 <div className="flex items-start gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
                     <Package className="h-6 w-6 text-primary" />
@@ -206,7 +196,6 @@ export default function Orders() {
                         {new Date(order.createdAt).toLocaleDateString()}
                       </span>
                     </div>
-                    {/* Stars Display */}
                     {order.rating > 0 && (
                       <div className="flex items-center gap-1 mt-2 text-yellow-500">
                         {[...Array(order.rating)].map((_, i) => (
@@ -216,8 +205,6 @@ export default function Orders() {
                     )}
                   </div>
                 </div>
-
-                {/* Status & Buttons */}
                 <div className="flex items-center gap-4">
                   <Badge
                     variant={
@@ -225,8 +212,6 @@ export default function Orders() {
                     }>
                     {order.status}
                   </Badge>
-
-                  {/* Rate Button - Stops Propagation to avoid opening Details */}
                   <Button
                     variant="outline"
                     size="sm"
@@ -240,7 +225,6 @@ export default function Orders() {
         )}
       </div>
 
-      {/* --- Pagination Controls --- */}
       <div className="flex items-center justify-center gap-4 mt-6">
         <Button
           variant="secondary"
@@ -259,9 +243,7 @@ export default function Orders() {
         </Button>
       </div>
 
-      {/* ========================================================= */}
-      {/* MODAL 1: Order Details (Seller Info, Full Amount, etc.)   */}
-      {/* ========================================================= */}
+      {/* Details Modal (Unchanged Layout) */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
         <DialogContent className="sm:max-w-[500px] top-[50%] left-[50%] !translate-x-[-50%] !translate-y-[-50%]">
           <DialogHeader>
@@ -270,10 +252,8 @@ export default function Orders() {
               Full information about your purchase.
             </DialogDescription>
           </DialogHeader>
-
           {selectedOrder && (
             <div className="grid gap-6 py-4">
-              {/* Product Info */}
               <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
                   <Package className="h-5 w-5 text-primary" />
@@ -289,8 +269,6 @@ export default function Orders() {
                   </p>
                 </div>
               </div>
-
-              {/* Seller Details */}
               <div className="border-t pt-4">
                 <h4 className="text-sm font-semibold mb-3">
                   Seller Information
@@ -308,24 +286,12 @@ export default function Orders() {
                   </div>
                 </div>
               </div>
-
-              {/* Existing Review */}
-              {selectedOrder.feedback && (
-                <div className="border-t pt-4">
-                  <h4 className="text-sm font-semibold mb-1">Your Review</h4>
-                  <div className="text-sm text-muted-foreground italic">
-                    "{selectedOrder.feedback}"
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* ========================================================= */}
-      {/* MODAL 2: Feedback Form (Rating & Comment)                 */}
-      {/* ========================================================= */}
+      {/* Feedback Modal */}
       <Dialog open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
         <DialogContent className="top-[50%] left-[50%] !translate-x-[-50%] !translate-y-[-50%]">
           <DialogHeader>
@@ -355,7 +321,11 @@ export default function Orders() {
             />
           </div>
           <DialogFooter>
-            <Button onClick={submitFeedback}>Submit Review</Button>
+            <Button
+              onClick={() => feedbackMutation.mutate()}
+              disabled={feedbackMutation.isPending}>
+              {feedbackMutation.isPending ? "Submitting..." : "Submit Review"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

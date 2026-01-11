@@ -38,31 +38,30 @@ import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { getClientId } from "@/lib/clientId";
 import { useNavigate } from "react-router-dom";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 
 // --- 1. Define Random Image List ---
 const PLACEHOLDER_IMAGES = [
-  "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=400&fit=crop", // Headphones
-  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&h=400&fit=crop", // Watch
-  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=400&fit=crop", // Sneakers
-  "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&h=400&fit=crop", // Camera
-  "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=500&h=400&fit=crop", // Headphones 2
-  "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=500&h=400&fit=crop", // Sunglasses
-  "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&h=400&fit=crop", // Backpack
-  "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=500&h=400&fit=crop", // Sneakers 2
-  "https://images.unsplash.com/photo-1618424181497-157f25b6ddd5?w=500&h=400&fit=crop", // Laptop
-  "https://images.unsplash.com/photo-1593642632823-8f78536788c6?w=500&h=400&fit=crop", // Monitor
-  "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500&h=400&fit=crop", // Sofa
-  "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=500&h=400&fit=crop", // T-Shirt
+  "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1618424181497-157f25b6ddd5?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1593642632823-8f78536788c6?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=500&h=400&fit=crop",
 ];
 
-// Helper to pick image deterministically based on ID
 const getProductImage = (id: number, existingImage?: string) => {
   if (existingImage) return existingImage;
   const index = id % PLACEHOLDER_IMAGES.length;
   return PLACEHOLDER_IMAGES[index];
 };
 
-// --- Interfaces ---
 interface Product {
   id: number;
   name: string;
@@ -71,7 +70,6 @@ interface Product {
   image?: string;
   category?: string;
   description?: string;
-  // NEW: Fields for list view stats
   averageRating: number;
   reviewCount: number;
 }
@@ -86,20 +84,17 @@ interface Review {
 interface ProductDetail extends Product {
   sellerName: string;
   sellerEmail: string;
-  totalReviews: number; // Detailed view might use this name from separate API
+  totalReviews: number;
   reviews: Review[];
 }
 
 export default function Products() {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [debouncedSearch, setDebouncedSearch] = useState(search);
 
-  // --- Modal State ---
+  // Modal State
   const [selectedProduct, setSelectedProduct] = useState<ProductDetail | null>(
     null
   );
@@ -109,20 +104,23 @@ export default function Products() {
   const { refreshCart } = useCart();
   const navigate = useNavigate();
 
+  // Debounce effect
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(search);
+      setPage(1); // Reset page on search change
     }, 500);
     return () => clearTimeout(handler);
   }, [search]);
 
-  useEffect(() => {
-    fetchProducts();
-  }, [getToken, page, selectedCategory, debouncedSearch]);
-
-  const fetchProducts = async () => {
-    setLoading(true);
-    try {
+  // --- TanStack Query: Fetch Products ---
+  const {
+    data: productData,
+    isLoading,
+    isFetching,
+  } = useQuery({
+    queryKey: ["products", page, selectedCategory, debouncedSearch],
+    queryFn: async () => {
       const token = getToken();
       const headers: any = {
         "Content-Type": "application/json",
@@ -131,7 +129,6 @@ export default function Products() {
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       let url = "";
-
       if (debouncedSearch.length > 0) {
         url = `${API_URL}/product/search?q=${encodeURIComponent(
           debouncedSearch
@@ -147,40 +144,42 @@ export default function Products() {
 
       if (res.status === 429) {
         navigate("/too-many-requests");
-        return;
+        throw new Error("Too many requests");
       }
-
       if (!res.ok) throw new Error("Failed to fetch products");
 
       const data = await res.json();
       let items: Product[] = [];
+      let totalPages = 1;
 
       if (Array.isArray(data)) {
         items = data;
-        setTotalPages(1);
       } else if (data.items) {
         items = data.items;
-        setTotalPages(data.totalPages);
+        totalPages = data.totalPages;
       }
 
-      // --- Map items using the helper ---
-      const mappedProducts = items.map((p: any) => ({
+      // Map images
+      const mappedItems = items.map((p: any) => ({
         ...p,
         image: getProductImage(p.id, p.image),
       }));
 
-      setProducts(mappedProducts);
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Error loading products", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { items: mappedItems, totalPages };
+    },
+    placeholderData: keepPreviousData, // Keeps old data visible while new data loads
+    staleTime: 1000 * 60, // 1 minute
+  });
 
-  // --- Fetch Full Details ---
+  const products = productData?.items || [];
+  const totalPages = productData?.totalPages || 1;
+
+  // --- Fetch Full Details (On demand) ---
   const handleProductClick = async (productId: number) => {
     try {
+      // You could also convert this to a useQuery with `enabled: false`
+      // or a separate query that triggers on modal open,
+      // but simple fetch is okay for on-click events.
       const res = await fetch(`${API_URL}/product/${productId}`, {
         headers: {
           "Content-Type": "application/json",
@@ -300,87 +299,93 @@ export default function Products() {
       </div>
 
       {/* --- Product Grid --- */}
-      {loading ? (
+      {isLoading ? (
         <div className="flex justify-center p-12">
           <Loader2 className="animate-spin h-8 w-8 text-primary" />
         </div>
       ) : (
         <>
-          {products.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              No products found.
+          <div className="min-h-[400px]">
+            {/* Opacity indicates stale/background fetching during pagination */}
+            <div
+              className={`transition-opacity duration-200 ${
+                isFetching ? "opacity-70" : "opacity-100"
+              }`}>
+              {products.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  No products found.
+                </div>
+              ) : (
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {products.map((product) => (
+                    <Card
+                      key={product.id}
+                      className="group overflow-hidden hover:shadow-lg flex flex-col cursor-pointer transition-all hover:border-primary/50"
+                      onClick={() => handleProductClick(product.id)}>
+                      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+                        <img
+                          src={product.image}
+                          alt={product.name}
+                          className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                        />
+                        {product.category && (
+                          <Badge className="absolute left-3 top-3">
+                            {product.category}
+                          </Badge>
+                        )}
+                      </div>
+                      <CardContent className="p-4 flex-1">
+                        <h3 className="text-lg font-semibold line-clamp-1">
+                          {product.name}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mb-2 line-clamp-2 h-8">
+                          {product.description || "No description available."}
+                        </p>
+
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                          <Package className="h-4 w-4" />
+                          <span>{product.stock} in stock</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 mb-3">
+                          {product.reviewCount > 0 ? (
+                            <>
+                              <div className="flex items-center text-yellow-500">
+                                <Star className="h-4 w-4 fill-current" />
+                              </div>
+                              <span className="text-sm font-medium">
+                                {product.averageRating.toFixed(1)}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                ({product.reviewCount})
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">
+                              No reviews yet
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-2xl font-bold text-primary">
+                          ${product.price}
+                        </p>
+                      </CardContent>
+                      <CardFooter className="p-4 pt-0">
+                        <Button
+                          onClick={(e) => addToCart(e, product)}
+                          className="w-full gap-2"
+                          disabled={product.stock === 0}>
+                          <ShoppingCart className="h-4 w-4" />
+                          {product.stock === 0 ? "Out of Stock" : "Add to Cart"}
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {products.map((product) => (
-                <Card
-                  key={product.id}
-                  className="group overflow-hidden hover:shadow-lg flex flex-col cursor-pointer transition-all hover:border-primary/50"
-                  onClick={() => handleProductClick(product.id)}>
-                  <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-                    <img
-                      src={product.image}
-                      alt={product.name}
-                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                    />
-                    {product.category && (
-                      <Badge className="absolute left-3 top-3">
-                        {product.category}
-                      </Badge>
-                    )}
-                  </div>
-                  <CardContent className="p-4 flex-1">
-                    <h3 className="text-lg font-semibold line-clamp-1">
-                      {product.name}
-                    </h3>
-                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2 h-8">
-                      {product.description || "No description available."}
-                    </p>
-
-                    {/* Stock Info */}
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                      <Package className="h-4 w-4" />
-                      <span>{product.stock} in stock</span>
-                    </div>
-
-                    {/* NEW: Rating Info */}
-                    <div className="flex items-center gap-2 mb-3">
-                      {product.reviewCount > 0 ? (
-                        <>
-                          <div className="flex items-center text-yellow-500">
-                            <Star className="h-4 w-4 fill-current" />
-                          </div>
-                          <span className="text-sm font-medium">
-                            {product.averageRating.toFixed(1)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            ({product.reviewCount})
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-xs text-muted-foreground italic">
-                          No reviews yet
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="text-2xl font-bold text-primary">
-                      ${product.price}
-                    </p>
-                  </CardContent>
-                  <CardFooter className="p-4 pt-0">
-                    <Button
-                      onClick={(e) => addToCart(e, product)}
-                      className="w-full gap-2"
-                      disabled={product.stock === 0}>
-                      <ShoppingCart className="h-4 w-4" />
-                      {product.stock === 0 ? "Out of Stock" : "Add to Cart"}
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
-            </div>
-          )}
+          </div>
 
           {/* --- Pagination --- */}
           {debouncedSearch === "" && products.length > 0 && (
@@ -388,7 +393,7 @@ export default function Products() {
               <Button
                 variant="outline"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}>
+                disabled={page === 1 || isFetching}>
                 <ChevronLeft className="h-4 w-4 mr-2" /> Previous
               </Button>
               <span className="text-sm text-muted-foreground">
@@ -397,7 +402,7 @@ export default function Products() {
               <Button
                 variant="outline"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}>
+                disabled={page === totalPages || isFetching}>
                 Next <ChevronRight className="h-4 w-4 ml-2" />
               </Button>
             </div>
@@ -406,7 +411,7 @@ export default function Products() {
       )}
 
       {/* ========================================================= */}
-      {/* MODAL: Product Details (Seller Info, Reviews, etc.)       */}
+      {/* MODAL: Product Details (Unchanged from original logic)    */}
       {/* ========================================================= */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 top-[50%] left-[50%] !translate-x-[-50%] !translate-y-[-50%]">
@@ -420,7 +425,6 @@ export default function Products() {
           <ScrollArea className="flex-1 p-6">
             {selectedProduct && (
               <div className="space-y-6">
-                {/* Main Info */}
                 <div className="flex flex-col sm:flex-row gap-6">
                   <img
                     src={selectedProduct.image}
@@ -432,7 +436,6 @@ export default function Products() {
                       {selectedProduct.category}
                     </Badge>
 
-                    {/* Stock & Rating Summary */}
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Package className="h-4 w-4" /> {selectedProduct.stock}{" "}
@@ -447,7 +450,6 @@ export default function Products() {
                       )}
                     </div>
 
-                    {/* Seller Info */}
                     <div className="bg-muted/50 p-3 rounded-md text-sm space-y-1">
                       <div className="font-semibold flex items-center gap-2">
                         <Store className="h-4 w-4" /> Seller Information
@@ -466,7 +468,6 @@ export default function Products() {
 
                 <Separator />
 
-                {/* Description */}
                 <div>
                   <h3 className="font-semibold mb-2">Description</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
@@ -477,7 +478,6 @@ export default function Products() {
 
                 <Separator />
 
-                {/* Reviews Section */}
                 <div>
                   <h3 className="font-semibold mb-4 flex items-center gap-2">
                     Customer Reviews
@@ -529,7 +529,6 @@ export default function Products() {
             )}
           </ScrollArea>
 
-          {/* --- Added Footer with Add to Cart --- */}
           <DialogFooter className="p-4 border-t bg-background">
             {selectedProduct && (
               <div className="flex w-full items-center justify-between">

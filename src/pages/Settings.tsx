@@ -31,36 +31,26 @@ import {
   Sun,
   Store,
   Server,
-  Lock,
-  Globe,
-  Truck,
-  DollarSign,
-  Download,
-  Trash2,
-  Users,
   CreditCard,
   Code,
   Key,
   Database,
   RefreshCw,
   Loader2,
+  Truck,
+  DollarSign,
+  Users,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getClientId } from "@/lib/clientId";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 export default function Settings() {
   const { user, logout, getToken, API_URL } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
-
-  // --- STATE MANAGEMENT ---
-
-  // 1. Global User Data (Needed to preserve Name/Avatar when saving Admin Ops)
-  const [fullProfile, setFullProfile] = useState<any>(null);
-
-  // 2. Preferences (Mapped to Backend: UserPreferences)
+  // --- Local State for UI Binding ---
   const [preferences, setPreferences] = useState({
     theme: "system",
     language: "en",
@@ -72,87 +62,68 @@ export default function Settings() {
     },
   });
 
-  // 3. Security (Password - Mock for now as backend endpoint specific for this is pending)
   const [passwords, setPasswords] = useState({
     current: "",
     new: "",
     confirm: "",
   });
 
-  // 4. Admin (Seller) Operations (Mapped to Backend: ProfileData.SellerOps)
   const [sellerOps, setSellerOps] = useState({
     autoAcceptOrders: true,
     currency: "USD",
-    returnPolicy: "30-day standard",
   });
 
-  // 5. SuperAdmin Platform (Mock/Local for now)
+  // Mock platform config (local state only for now)
   const [platformConfig, setPlatformConfig] = useState({
     maintenanceMode: false,
     allowRegistrations: true,
     commissionRate: 5,
   });
 
-  // --- FETCH SETTINGS ON MOUNT ---
+  // --- 1. Fetch Data (Query) ---
+  const { data: fullProfile, isLoading } = useQuery({
+    queryKey: ["profile", user?.id], // Sharing key with Profile.tsx to keep data in sync
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/user/profile`, {
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(),
+        },
+      });
+      if (!res.ok) throw new Error("Failed to load settings");
+      return res.json();
+    },
+  });
+
+  // --- 2. Sync Data to Local State ---
+  // We sync whenever new data arrives from the server
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const res = await fetch(`${API_URL}/user/profile`, {
-          headers: {
-            Authorization: `Bearer ${getToken()}`,
-            ClientId: getClientId(),
+    if (fullProfile) {
+      if (fullProfile.preferences) {
+        setPreferences({
+          theme: fullProfile.preferences.theme || "system",
+          language: fullProfile.preferences.language || "en",
+          twoFactorEnabled: fullProfile.preferences.twoFactorEnabled || false,
+          notifications: {
+            email: fullProfile.preferences.notifications?.email ?? true,
+            push: fullProfile.preferences.notifications?.push ?? false,
+            marketing: fullProfile.preferences.notifications?.marketing ?? true,
           },
         });
-
-        if (res.ok) {
-          const data = await res.json();
-          setFullProfile(data); // Store full object to preserve other fields
-
-          // Map Preferences
-          if (data.preferences) {
-            setPreferences({
-              theme: data.preferences.theme || "system",
-              language: data.preferences.language || "en",
-              twoFactorEnabled: data.preferences.twoFactorEnabled || false,
-              notifications: {
-                email: data.preferences.notifications?.email ?? true,
-                push: data.preferences.notifications?.push ?? false,
-                marketing: data.preferences.notifications?.marketing ?? true,
-              },
-            });
-          }
-
-          // Map Seller Ops (If Admin)
-          if (data.role === "Admin" && data.profileData?.sellerOps) {
-            setSellerOps({
-              autoAcceptOrders:
-                data.profileData.sellerOps.autoAcceptOrders ?? true,
-              currency: data.profileData.sellerOps.currency || "USD",
-              returnPolicy: "30-day standard", // Not in backend yet, keep default
-            });
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load settings", error);
-        toast({
-          title: "Error",
-          description: "Could not load your settings.",
-          variant: "destructive",
-        });
-      } finally {
-        setInitialLoading(false);
       }
-    };
+      if (fullProfile.role === "Admin" && fullProfile.profileData?.sellerOps) {
+        setSellerOps({
+          autoAcceptOrders:
+            fullProfile.profileData.sellerOps.autoAcceptOrders ?? true,
+          currency: fullProfile.profileData.sellerOps.currency || "USD",
+        });
+      }
+    }
+  }, [fullProfile]);
 
-    if (user) fetchSettings();
-  }, [user, API_URL, getToken]);
-
-  // --- HANDLERS ---
-
-  // Save General & Notification Preferences
-  const handleSavePreferences = async () => {
-    setLoading(true);
-    try {
+  // --- 3. Save Preferences Mutation ---
+  const savePreferencesMutation = useMutation({
+    mutationFn: async () => {
       const res = await fetch(`${API_URL}/user/preferences`, {
         method: "PUT",
         headers: {
@@ -162,34 +133,25 @@ export default function Settings() {
         },
         body: JSON.stringify({ preferences }),
       });
-
-      if (res.ok) {
-        toast({
-          title: "Preferences Saved",
-          description: "Your settings have been updated.",
-        });
-      } else {
-        throw new Error("Failed to save");
-      }
-    } catch (error) {
+      if (!res.ok) throw new Error("Failed to save");
+    },
+    onSuccess: () => {
       toast({
-        title: "Error",
-        description: "Failed to save preferences.",
-        variant: "destructive",
+        title: "Preferences Saved",
+        description: "Your settings have been updated.",
       });
-    } finally {
-      setLoading(false);
-    }
-  };
+      // Invalidate profile query so other components (like Profile.tsx) get fresh data
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: () => toast({ title: "Error", variant: "destructive" }),
+  });
 
-  // Save Admin Store Operations (Updates ProfileData)
-  const handleSaveOperations = async () => {
-    if (!fullProfile) return;
-    setLoading(true);
+  // --- 4. Save Seller Operations Mutation ---
+  const saveOpsMutation = useMutation({
+    mutationFn: async () => {
+      if (!fullProfile) return;
 
-    try {
-      // We must send the FULL profile data structure back,
-      // otherwise we might overwrite Address/Socials with just SellerOps.
+      // Preserve existing profile data, only update sellerOps
       const updatedProfileData = {
         ...fullProfile.profileData,
         sellerOps: {
@@ -215,50 +177,37 @@ export default function Settings() {
         },
         body: JSON.stringify(payload),
       });
-
-      if (res.ok) {
-        toast({
-          title: "Operations Updated",
-          description: "Store configuration saved.",
-        });
-        // Update local full profile state to reflect changes
-        setFullProfile({ ...fullProfile, profileData: updatedProfileData });
-      } else {
-        throw new Error("Failed to save ops");
-      }
-    } catch (error) {
+      if (!res.ok) throw new Error("Failed to save ops");
+    },
+    onSuccess: () => {
       toast({
-        title: "Error",
-        description: "Failed to update operations.",
-        variant: "destructive",
+        title: "Operations Updated",
+        description: "Store configuration saved.",
       });
-    } finally {
-      setLoading(false);
-    }
-  };
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: () => toast({ title: "Error", variant: "destructive" }),
+  });
 
-  const handleChangePassword = async () => {
+  // --- Mock Password Change ---
+  const handleChangePassword = () => {
     if (passwords.new !== passwords.confirm) {
       toast({ title: "Passwords do not match", variant: "destructive" });
       return;
     }
-    setLoading(true);
-    // Simulate API call (Backend endpoint for direct password change needs to be added)
-    setTimeout(() => {
-      setLoading(false);
-      toast({
-        title: "Password updated",
-        description: "(Simulation) Password changed.",
-      });
-      setPasswords({ current: "", new: "", confirm: "" });
-    }, 1000);
+    // Simulate API call
+    toast({
+      title: "Password updated",
+      description: "(Simulation) Password changed.",
+    });
+    setPasswords({ current: "", new: "", confirm: "" });
   };
 
   const isCustomer = user?.role === "Customer" || !user?.role;
   const isSuperAdmin = user?.role === "SuperAdmin";
   const isAdmin = user?.role === "Admin";
 
-  if (initialLoading) {
+  if (isLoading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -284,23 +233,18 @@ export default function Settings() {
             className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-4 py-2">
             General
           </TabsTrigger>
-
           <TabsTrigger
             value="security"
             className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-4 py-2">
             Security
           </TabsTrigger>
-
-          {/* Customer Specific */}
           {isCustomer && (
             <TabsTrigger
               value="payment"
               className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-4 py-2">
-              Payment Methods
+              Payment
             </TabsTrigger>
           )}
-
-          {/* Seller Specific */}
           {isAdmin && (
             <>
               <TabsTrigger
@@ -315,8 +259,6 @@ export default function Settings() {
               </TabsTrigger>
             </>
           )}
-
-          {/* SuperAdmin Specific */}
           {isSuperAdmin && (
             <TabsTrigger
               value="platform"
@@ -324,7 +266,6 @@ export default function Settings() {
               Platform
             </TabsTrigger>
           )}
-
           <TabsTrigger
             value="notifications"
             className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-4 py-2">
@@ -332,21 +273,18 @@ export default function Settings() {
           </TabsTrigger>
         </TabsList>
 
-        {/* --- 1. General Tab (Everyone) --- */}
+        {/* --- General Tab --- */}
         <TabsContent value="general" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Palette className="h-5 w-5" /> Appearance & Language
               </CardTitle>
-              <CardDescription>
-                Customize the look and feel of the application.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div className="space-y-0.5">
-                  <Label className="text-base">Theme Mode</Label>
+                  <Label>Theme Mode</Label>
                   <p className="text-sm text-muted-foreground">
                     Switch between light and dark themes.
                   </p>
@@ -389,8 +327,12 @@ export default function Settings() {
               </div>
             </CardContent>
             <CardFooter className="border-t bg-muted/50 px-6 py-4">
-              <Button onClick={handleSavePreferences} disabled={loading}>
-                {loading ? "Saving..." : "Save Changes"}
+              <Button
+                onClick={() => savePreferencesMutation.mutate()}
+                disabled={savePreferencesMutation.isPending}>
+                {savePreferencesMutation.isPending
+                  ? "Saving..."
+                  : "Save Changes"}
               </Button>
             </CardFooter>
           </Card>
@@ -402,11 +344,9 @@ export default function Settings() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex justify-between items-center">
-              <div className="space-y-1">
+              <div>
                 <p className="font-medium">Sign Out</p>
-                <p className="text-sm text-muted-foreground">
-                  End your session on this device.
-                </p>
+                <p className="text-sm text-muted-foreground">End session.</p>
               </div>
               <Button variant="destructive" onClick={logout}>
                 Sign Out
@@ -415,25 +355,18 @@ export default function Settings() {
           </Card>
         </TabsContent>
 
-        {/* --- 2. Security Tab (Everyone) --- */}
+        {/* --- Security Tab --- */}
         <TabsContent value="security" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" /> Account Security
               </CardTitle>
-              <CardDescription>
-                Manage your password and authentication methods.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* 2FA */}
               <div className="flex items-center justify-between space-x-2">
                 <Label htmlFor="2fa" className="flex flex-col space-y-1">
-                  <span className="font-medium">Two-Factor Authentication</span>
-                  <span className="font-normal text-xs text-muted-foreground">
-                    Add an extra layer of security to your account.
-                  </span>
+                  <span>Two-Factor Authentication</span>
                 </Label>
                 <Switch
                   id="2fa"
@@ -443,10 +376,7 @@ export default function Settings() {
                   }
                 />
               </div>
-
               <Separator />
-
-              {/* Password Change */}
               <div className="space-y-4">
                 <h3 className="font-medium">Change Password</h3>
                 <div className="grid gap-2">
@@ -485,21 +415,21 @@ export default function Settings() {
             </CardContent>
             <CardFooter className="border-t bg-muted/50 px-6 py-4 flex justify-between">
               <span className="text-xs text-muted-foreground self-center">
-                * 2FA setting is saved via "Save Preferences" below.
+                * 2FA saved via "Save Preferences".
               </span>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={handleSavePreferences}>
+                <Button
+                  variant="outline"
+                  onClick={() => savePreferencesMutation.mutate()}>
                   Save 2FA
                 </Button>
-                <Button onClick={handleChangePassword} disabled={loading}>
-                  Update Password
-                </Button>
+                <Button onClick={handleChangePassword}>Update Password</Button>
               </div>
             </CardFooter>
           </Card>
         </TabsContent>
 
-        {/* --- 3. Payment Methods (Customer Only) --- */}
+        {/* --- Payment Methods (Customer Only) --- */}
         {isCustomer && (
           <TabsContent value="payment" className="space-y-4">
             <Card>
@@ -539,130 +469,121 @@ export default function Settings() {
           </TabsContent>
         )}
 
-        {/* --- 4. Operations Tab (Admin/Seller Only) --- */}
+        {/* --- Seller Ops Tab (Admin Only) --- */}
         {isAdmin && (
-          <>
-            <TabsContent value="operations" className="space-y-4">
+          <TabsContent value="operations" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Store className="h-5 w-5" /> Store Operations
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between space-x-2">
+                  <Label htmlFor="auto-accept">Auto-Accept Orders</Label>
+                  <Switch
+                    id="auto-accept"
+                    checked={sellerOps.autoAcceptOrders}
+                    onCheckedChange={(c) =>
+                      setSellerOps({ ...sellerOps, autoAcceptOrders: c })
+                    }
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Default Currency</Label>
+                  <Select
+                    value={sellerOps.currency}
+                    onValueChange={(c) =>
+                      setSellerOps({ ...sellerOps, currency: c })
+                    }>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="USD">USD ($)</SelectItem>
+                      <SelectItem value="EUR">EUR (€)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+              <CardFooter className="border-t bg-muted/50 px-6 py-4">
+                <Button
+                  onClick={() => saveOpsMutation.mutate()}
+                  disabled={saveOpsMutation.isPending}>
+                  {saveOpsMutation.isPending ? "Saving..." : "Save Operations"}
+                </Button>
+              </CardFooter>
+            </Card>
+
+            <div className="grid gap-4 md:grid-cols-2">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Store className="h-5 w-5" /> Store Operations
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Truck className="h-4 w-4" /> Shipping Settings
                   </CardTitle>
-                  <CardDescription>
-                    Configure how you process orders and payments.
-                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between space-x-2">
-                    <Label
-                      htmlFor="auto-accept"
-                      className="flex flex-col space-y-1">
-                      <span>Auto-Accept Orders</span>
-                      <span className="font-normal text-xs text-muted-foreground">
-                        Automatically approve incoming orders if stock is
-                        available.
-                      </span>
-                    </Label>
-                    <Switch
-                      id="auto-accept"
-                      checked={sellerOps.autoAcceptOrders}
-                      onCheckedChange={(c) =>
-                        setSellerOps({ ...sellerOps, autoAcceptOrders: c })
-                      }
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Default Currency</Label>
-                    <Select
-                      value={sellerOps.currency}
-                      onValueChange={(c) =>
-                        setSellerOps({ ...sellerOps, currency: c })
-                      }>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="USD">USD ($)</SelectItem>
-                        <SelectItem value="EUR">EUR (€)</SelectItem>
-                        <SelectItem value="GBP">GBP (£)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardContent>
-                <CardFooter className="border-t bg-muted/50 px-6 py-4">
-                  <Button onClick={handleSaveOperations} disabled={loading}>
-                    {loading ? "Saving..." : "Save Operations"}
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Manage shipping zones and delivery partners.
+                  </p>
+                  <Button variant="outline" className="w-full">
+                    Configure Shipping
                   </Button>
-                </CardFooter>
-              </Card>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Truck className="h-4 w-4" /> Shipping Settings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Manage shipping zones and delivery partners.
-                    </p>
-                    <Button variant="outline" className="w-full">
-                      Configure Shipping
-                    </Button>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <DollarSign className="h-4 w-4" /> Payout Settings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Update bank details and payout schedule.
-                    </p>
-                    <Button variant="outline" className="w-full">
-                      Manage Payouts
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="integrations" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Code className="h-5 w-5" /> API Access
-                  </CardTitle>
-                  <CardDescription>
-                    Manage API keys for external tools.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Key className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium text-sm">Production Key</p>
-                        <p className="text-xs text-muted-foreground font-mono">
-                          pk_live_...x892
-                        </p>
-                      </div>
-                    </div>
-                    <Button variant="outline" size="sm">
-                      Roll Key
-                    </Button>
-                  </div>
-                  <Button className="w-full">Generate New Key</Button>
                 </CardContent>
               </Card>
-            </TabsContent>
-          </>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" /> Payout Settings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Update bank details and payout schedule.
+                  </p>
+                  <Button variant="outline" className="w-full">
+                    Manage Payouts
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
         )}
 
-        {/* --- 5. Platform Tab (SuperAdmin Only) --- */}
+        {/* --- Integrations Tab (Admin Only) --- */}
+        {isAdmin && (
+          <TabsContent value="integrations" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Code className="h-5 w-5" /> API Access
+                </CardTitle>
+                <CardDescription>
+                  Manage API keys for external tools.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Key className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="font-medium text-sm">Production Key</p>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        pk_live_...x892
+                      </p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm">
+                    Roll Key
+                  </Button>
+                </div>
+                <Button className="w-full">Generate New Key</Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* --- Platform Tab (SuperAdmin Only) --- */}
         {isSuperAdmin && (
           <TabsContent value="platform" className="space-y-4">
             <Card>
@@ -777,28 +698,18 @@ export default function Settings() {
           </TabsContent>
         )}
 
-        {/* --- 6. Notifications Tab (Everyone) --- */}
+        {/* --- Notifications Tab --- */}
         <TabsContent value="notifications" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Bell className="h-5 w-5" /> Email Preferences
               </CardTitle>
-              <CardDescription>
-                Manage what emails you want to receive.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between space-x-2">
-                <Label htmlFor="orders" className="flex flex-col space-y-1">
-                  <span>Order Updates</span>
-                  <span className="font-normal text-xs text-muted-foreground">
-                    Receive emails about your order status, shipping, and
-                    delivery.
-                  </span>
-                </Label>
+              <div className="flex items-center justify-between">
+                <Label>Order Updates</Label>
                 <Switch
-                  id="orders"
                   checked={preferences.notifications.email}
                   onCheckedChange={(c) =>
                     setPreferences({
@@ -808,16 +719,9 @@ export default function Settings() {
                   }
                 />
               </div>
-              <Separator />
-              <div className="flex items-center justify-between space-x-2">
-                <Label htmlFor="promo" className="flex flex-col space-y-1">
-                  <span>Marketing & Offers</span>
-                  <span className="font-normal text-xs text-muted-foreground">
-                    Receive emails about new products, sales, and events.
-                  </span>
-                </Label>
+              <div className="flex items-center justify-between">
+                <Label>Marketing</Label>
                 <Switch
-                  id="promo"
                   checked={preferences.notifications.marketing}
                   onCheckedChange={(c) =>
                     setPreferences({
@@ -832,8 +736,12 @@ export default function Settings() {
               </div>
             </CardContent>
             <CardFooter className="border-t bg-muted/50 px-6 py-4">
-              <Button onClick={handleSavePreferences} disabled={loading}>
-                {loading ? "Saving..." : "Save Preferences"}
+              <Button
+                onClick={() => savePreferencesMutation.mutate()}
+                disabled={savePreferencesMutation.isPending}>
+                {savePreferencesMutation.isPending
+                  ? "Saving..."
+                  : "Save Preferences"}
               </Button>
             </CardFooter>
           </Card>

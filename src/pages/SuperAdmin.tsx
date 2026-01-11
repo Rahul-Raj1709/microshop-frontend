@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { DataTable } from "@/components/dashboard/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Plus, Search, Trash2, UserCheck, UserX, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
-import { getClientId } from "@/lib/clientId"; // [!code ++]
+import { getClientId } from "@/lib/clientId";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface Admin {
   id: number;
@@ -26,12 +27,8 @@ interface Admin {
 }
 
 export default function SuperAdmin() {
-  const [admins, setAdmins] = useState<Admin[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
   const [form, setForm] = useState({
     name: "",
     username: "",
@@ -41,135 +38,124 @@ export default function SuperAdmin() {
   });
 
   const { getToken, API_URL } = useAuth();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    fetchAdmins();
-  }, []);
-
-  const fetchAdmins = async () => {
-    try {
+  // --- 1. Fetch Admins ---
+  const { data: admins = [], isLoading } = useQuery<Admin[]>({
+    queryKey: ["admins"],
+    queryFn: async () => {
       const res = await fetch(`${API_URL}/auth/admins`, {
         headers: {
           Authorization: `Bearer ${getToken()}`,
-          ClientId: getClientId(), // [!code ++]
+          ClientId: getClientId(),
         },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setAdmins(data);
-      }
-    } catch (error) {
-      console.error("Error fetching admins:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      if (!res.ok) throw new Error("Failed to fetch admins");
+      return res.json();
+    },
+  });
 
-  const handleCreate = async () => {
-    if (!form.username || !form.email || !form.password || !form.name) {
-      toast({
-        title: "Validation Error",
-        description: "All fields marked * are required.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
+  // --- 2. Create Admin Mutation ---
+  const createMutation = useMutation({
+    mutationFn: async () => {
       const res = await fetch(`${API_URL}/auth/register-admin`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
-          ClientId: getClientId(), // [!code ++]
+          ClientId: getClientId(),
         },
         body: JSON.stringify(form),
       });
 
-      if (res.ok) {
-        toast({
-          title: "Success",
-          description: `Admin ${form.username} created.`,
-        });
-        setDialogOpen(false);
-        setForm({
-          name: "",
-          username: "",
-          email: "",
-          password: "",
-          phoneNumber: "",
-        });
-        fetchAdmins();
-      } else {
-        const errText = await res.text();
-        toast({ title: "Error", description: errText, variant: "destructive" });
-      }
-    } catch (error) {
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || "Creation failed");
+      return text ? JSON.parse(text) : {};
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: `Admin ${form.username} created.`,
+      });
+      setDialogOpen(false);
+      setForm({
+        name: "",
+        username: "",
+        email: "",
+        password: "",
+        phoneNumber: "",
+      });
+      queryClient.invalidateQueries({ queryKey: ["admins"] });
+    },
+    onError: (err: Error) =>
       toast({
         title: "Error",
-        description: "Network error.",
+        description: err.message,
         variant: "destructive",
+      }),
+  });
+
+  // --- 3. Delete Mutation ---
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`${API_URL}/auth/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(),
+        },
       });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      if (!res.ok) throw new Error("Delete failed");
+    },
+    onSuccess: () => {
+      toast({ title: "Deleted", description: "Admin removed." });
+      queryClient.invalidateQueries({ queryKey: ["admins"] });
+    },
+    onError: () => toast({ title: "Error", variant: "destructive" }),
+  });
 
-  const handleDelete = async (admin: Admin) => {
-    if (confirm(`Delete admin "${admin.username}"?`)) {
-      try {
-        const res = await fetch(`${API_URL}/auth/${admin.id}`, {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${getToken()}`,
-            ClientId: getClientId(), // [!code ++]
-          },
-        });
-
-        if (res.ok) {
-          setAdmins(admins.filter((a) => a.id !== admin.id));
-          toast({ title: "Deleted", description: "Admin removed." });
-        }
-      } catch (error) {
-        toast({ title: "Error", variant: "destructive" });
-      }
-    }
-  };
-
-  const toggleStatus = async (admin: Admin) => {
-    const updateRequest = {
-      name: admin.name,
-      email: admin.email,
-      phoneNumber: admin.phoneNumber,
-      isActive: !admin.isActive,
-    };
-
-    try {
+  // --- 4. Toggle Status Mutation ---
+  const statusMutation = useMutation({
+    mutationFn: async (admin: Admin) => {
+      const updateRequest = {
+        name: admin.name,
+        email: admin.email,
+        phoneNumber: admin.phoneNumber,
+        isActive: !admin.isActive,
+      };
       const res = await fetch(`${API_URL}/auth/${admin.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${getToken()}`,
-          ClientId: getClientId(), // [!code ++]
+          ClientId: getClientId(),
         },
         body: JSON.stringify(updateRequest),
       });
+      if (!res.ok) throw new Error("Update failed");
+    },
+    onSuccess: () => {
+      toast({ title: "Status Updated" });
+      queryClient.invalidateQueries({ queryKey: ["admins"] });
+    },
+  });
 
-      if (res.ok) {
-        setAdmins(
-          admins.map((a) =>
-            a.id === admin.id ? { ...a, isActive: !a.isActive } : a
-          )
-        );
-        toast({ title: "Status Updated" });
-      }
-    } catch (err) {
+  // --- Handlers ---
+  const handleCreate = () => {
+    if (!form.username || !form.email || !form.password || !form.name) {
       toast({
-        title: "Error",
-        description: "Update failed",
+        title: "Validation Error",
+        description: "Fields marked * are required.",
         variant: "destructive",
       });
+      return;
+    }
+    createMutation.mutate();
+  };
+
+  const handleDelete = (admin: Admin) => {
+    if (confirm(`Delete admin "${admin.username}"?`)) {
+      deleteMutation.mutate(admin.id);
     }
   };
 
@@ -181,7 +167,6 @@ export default function SuperAdmin() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* ... (Rest of UI remains identical) ... */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
@@ -192,8 +177,7 @@ export default function SuperAdmin() {
           </p>
         </div>
         <Button onClick={() => setDialogOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          New Admin
+          <Plus className="h-4 w-4" /> New Admin
         </Button>
       </div>
 
@@ -225,7 +209,7 @@ export default function SuperAdmin() {
             { header: "Phone", accessorKey: "phoneNumber" },
             {
               header: "Status",
-              accessorKey: (row) => (
+              accessorKey: (row: Admin) => (
                 <Badge variant={row.isActive ? "default" : "outline"}>
                   {row.isActive ? "Active" : "Inactive"}
                 </Badge>
@@ -234,13 +218,13 @@ export default function SuperAdmin() {
             },
             {
               header: "Actions",
-              accessorKey: (row) => (
+              accessorKey: (row: Admin) => (
                 <div className="flex justify-end gap-2">
                   <Button
                     size="icon"
                     variant="ghost"
-                    onClick={() => toggleStatus(row)}
-                    title={row.isActive ? "Deactivate" : "Activate"}>
+                    onClick={() => statusMutation.mutate(row)}
+                    disabled={statusMutation.isPending}>
                     {row.isActive ? (
                       <UserX className="h-4 w-4 text-warning" />
                     ) : (
@@ -324,16 +308,13 @@ export default function SuperAdmin() {
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDialogOpen(false)}
-              disabled={isSubmitting}>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreate} disabled={isSubmitting}>
-              {isSubmitting ? (
+            <Button onClick={handleCreate} disabled={createMutation.isPending}>
+              {createMutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
+              )}{" "}
               Create Admin
             </Button>
           </DialogFooter>
