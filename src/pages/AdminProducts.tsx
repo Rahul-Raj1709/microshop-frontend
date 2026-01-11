@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,11 +20,18 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { getClientId } from "@/lib/clientId";
 import { useNavigate } from "react-router-dom";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 
 interface Product {
   id: number;
@@ -36,19 +44,17 @@ interface Product {
 }
 
 export default function AdminProducts() {
-  const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
-  const [totalCount, setTotalCount] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
 
-  const [dialogOpen, setDialogOpen] = useState(false);
+  // --- Dialog States ---
+  const [dialogOpen, setDialogOpen] = useState(false); // For Create/Edit
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false); // For Delete Confirmation
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(true);
 
+  // --- Form & Selection States ---
   const [form, setForm] = useState<Product>({
     id: 0,
     name: "",
@@ -58,24 +64,25 @@ export default function AdminProducts() {
     category: "",
     description: "",
   });
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
   const { getToken, API_URL } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
+  // Debounce Search
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(search);
+      setPage(1);
     }, 500);
     return () => clearTimeout(handler);
   }, [search]);
 
-  useEffect(() => {
-    fetchProducts();
-  }, [page, debouncedSearch]);
-
-  const fetchProducts = async () => {
-    setLoading(true);
-    try {
+  // --- 1. Fetch Products ---
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-products", page, debouncedSearch],
+    queryFn: async () => {
       const headers = {
         Authorization: `Bearer ${getToken()}`,
         ClientId: getClientId(),
@@ -91,118 +98,123 @@ export default function AdminProducts() {
       }
 
       const res = await fetch(url, { headers });
-
       if (res.status === 429) {
         navigate("/too-many-requests");
-        return;
+        throw new Error("Too many requests");
       }
+      const jsonData = await res.json();
 
-      const data = await res.json();
-
-      if (Array.isArray(data)) {
-        setProducts(data);
-        setTotalCount(data.length);
-        setTotalPages(1);
-      } else if (data.items) {
-        setProducts(data.items);
-        setTotalCount(data.totalCount);
-        setTotalPages(data.totalPages);
-      } else {
-        setProducts([]);
+      if (Array.isArray(jsonData)) {
+        return { items: jsonData, totalCount: jsonData.length, totalPages: 1 };
+      } else if (jsonData.items) {
+        return {
+          items: jsonData.items,
+          totalCount: jsonData.totalCount,
+          totalPages: jsonData.totalPages,
+        };
       }
-    } catch (err) {
-      console.error(err);
-      toast({ title: "Failed to load products", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { items: [], totalCount: 0, totalPages: 1 };
+    },
+    placeholderData: keepPreviousData,
+  });
 
-  const handleSave = async () => {
-    try {
+  const products = data?.items || [];
+  const totalPages = data?.totalPages || 1;
+
+  // --- 2. Create / Update Mutation ---
+  const saveMutation = useMutation({
+    mutationFn: async (product: Product) => {
       const headers = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${getToken()}`,
         ClientId: getClientId(),
       };
-
       const body = JSON.stringify({
-        ...form,
-        price: Number(form.price),
-        stock: Number(form.stock),
+        ...product,
+        price: Number(product.price),
+        stock: Number(product.stock),
       });
 
-      if (isEditing) {
-        const res = await fetch(`${API_URL}/product/${form.id}`, {
-          method: "PUT",
-          headers,
-          body,
-        });
+      const url = isEditing
+        ? `${API_URL}/product/${product.id}`
+        : `${API_URL}/product`;
+      const method = isEditing ? "PUT" : "POST";
 
-        if (res.status === 429) {
-          navigate("/too-many-requests");
-          return;
-        }
+      const res = await fetch(url, { method, headers, body });
 
-        if (!res.ok) throw new Error("Update failed");
-        toast({ title: "Product Updated" });
-      } else {
-        const res = await fetch(`${API_URL}/product`, {
-          method: "POST",
-          headers,
-          body,
-        });
-
-        if (res.status === 429) {
-          navigate("/too-many-requests");
-          return;
-        }
-
-        if (!res.ok) throw new Error("Creation failed");
-        toast({ title: "Product Created" });
+      if (res.status === 429) {
+        navigate("/too-many-requests");
+        throw new Error("Too many requests");
       }
 
-      fetchProducts();
+      if (!res.ok) throw new Error("Operation failed");
+
+      // FIX: Handle both JSON and Plain Text responses
+      const text = await res.text();
+      try {
+        // Try to parse as JSON
+        return text ? JSON.parse(text) : {};
+      } catch (e) {
+        // If parsing fails (e.g. it's just "Product updated successfully"),
+        // return the text or empty object. Since res.ok is true, it's a success.
+        return {};
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      toast({ title: isEditing ? "Product Updated" : "Product Created" });
       setDialogOpen(false);
-    } catch (error) {
+    },
+    onError: () => {
       toast({
         title: "Error",
         description: "Operation failed.",
         variant: "destructive",
       });
-    }
-  };
+    },
+  });
 
-  const handleDelete = async (product: Product) => {
-    if (confirm(`Delete "${product.name}"?`)) {
-      try {
-        const res = await fetch(`${API_URL}/product/${product.id}`, {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${getToken()}`,
-            ClientId: getClientId(),
-          },
-        });
+  // --- 3. Delete Mutation ---
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`${API_URL}/product/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(),
+        },
+      });
 
-        if (res.status === 429) {
-          navigate("/too-many-requests");
-          return;
-        }
-
-        if (res.ok) {
-          fetchProducts();
-          toast({ title: "Product deleted", variant: "destructive" });
-        }
-      } catch (err) {
-        toast({ title: "Error", variant: "destructive" });
+      if (res.status === 429) {
+        navigate("/too-many-requests");
+        throw new Error("Too many requests");
       }
-    }
-  };
 
-  const handleEdit = (product: Product) => {
-    setForm(product);
-    setIsEditing(true);
-    setDialogOpen(true);
+      if (!res.ok) throw new Error("Delete failed");
+
+      // FIX: Handle both JSON and Plain Text responses safely
+      const text = await res.text();
+      try {
+        return text ? JSON.parse(text) : {};
+      } catch (e) {
+        // Ignore JSON parse errors for plain text responses
+        return {};
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      toast({ title: "Product deleted", variant: "destructive" });
+      setDeleteDialogOpen(false);
+      setProductToDelete(null);
+    },
+    onError: () => {
+      toast({ title: "Error", variant: "destructive" });
+    },
+  });
+
+  // --- Handlers ---
+  const handleSave = () => {
+    saveMutation.mutate(form);
   };
 
   const handleCreate = () => {
@@ -217,6 +229,25 @@ export default function AdminProducts() {
     });
     setIsEditing(false);
     setDialogOpen(true);
+  };
+
+  const handleEdit = (product: Product) => {
+    setForm(product);
+    setIsEditing(true);
+    setDialogOpen(true);
+  };
+
+  // Open Delete Confirmation Modal
+  const handleDeleteClick = (product: Product) => {
+    setProductToDelete(product);
+    setDeleteDialogOpen(true);
+  };
+
+  // Actual Delete Action
+  const confirmDelete = () => {
+    if (productToDelete) {
+      deleteMutation.mutate(productToDelete.id);
+    }
   };
 
   return (
@@ -246,11 +277,11 @@ export default function AdminProducts() {
         />
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <Loader2 className="animate-spin" />
       ) : (
         <>
-          <DataTable
+          <DataTable<Product>
             columns={[
               { header: "ID", accessorKey: "id", className: "w-12 font-mono" },
               { header: "Name", accessorKey: "name", className: "font-medium" },
@@ -273,8 +304,8 @@ export default function AdminProducts() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="text-destructive"
-                      onClick={() => handleDelete(row)}>
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={() => handleDeleteClick(row)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -310,6 +341,7 @@ export default function AdminProducts() {
         </>
       )}
 
+      {/* --- CREATE / EDIT DIALOG --- */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -330,7 +362,7 @@ export default function AdminProducts() {
               <Label htmlFor="category">Category</Label>
               <Input
                 id="category"
-                placeholder="e.g. Electronics, Books"
+                placeholder="e.g. Electronics"
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
               />
@@ -339,7 +371,6 @@ export default function AdminProducts() {
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
-                placeholder="Product details..."
                 value={form.description}
                 onChange={(e) =>
                   setForm({ ...form, description: e.target.value })
@@ -375,8 +406,47 @@ export default function AdminProducts() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>
+              {saveMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
               {isEditing ? "Update" : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- DELETE CONFIRMATION DIALOG --- */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Product
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete{" "}
+              <span className="font-semibold text-foreground">
+                "{productToDelete?.name}"
+              </span>
+              ? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleteMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>

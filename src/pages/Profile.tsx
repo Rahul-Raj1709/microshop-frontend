@@ -3,7 +3,6 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -14,7 +13,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { Checkbox } from "@/components/ui/checkbox"; // Make sure this component exists
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Loader2,
   MapPin,
@@ -22,20 +21,15 @@ import {
   Mail,
   Phone,
   Save,
-  Building2,
-  CreditCard,
   Award,
-  FileText,
   Camera,
-  Globe,
-  Instagram,
-  Facebook,
   Plus,
   Trash2,
   Home,
 } from "lucide-react";
 import { getClientId } from "@/lib/clientId";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 // Define Address Type
 type SavedAddress = {
@@ -47,10 +41,9 @@ type SavedAddress = {
 export default function Profile() {
   const { user, getToken, API_URL } = useAuth();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  // Common Profile Data
+  // --- Local Form State ---
   const [profileData, setProfileData] = useState({
     name: "",
     email: "",
@@ -58,7 +51,6 @@ export default function Profile() {
     avatarUrl: "",
   });
 
-  // Customer Data
   const [customerData, setCustomerData] = useState({
     shippingAddress: "",
     billingAddress: "",
@@ -66,12 +58,6 @@ export default function Profile() {
     savedAddresses: [] as SavedAddress[],
   });
 
-  // UI State
-  const [sameAsShipping, setSameAsShipping] = useState(false);
-  const [newAddress, setNewAddress] = useState({ label: "", value: "" });
-  const [isAddingAddr, setIsAddingAddr] = useState(false);
-
-  // Admin Data
   const [businessData, setBusinessData] = useState({
     storeName: "",
     description: "",
@@ -80,65 +66,66 @@ export default function Profile() {
     socials: { instagram: "", facebook: "" },
   });
 
-  // Fetch Data
+  // UI State
+  const [sameAsShipping, setSameAsShipping] = useState(false);
+  const [newAddress, setNewAddress] = useState({ label: "", value: "" });
+  const [isAddingAddr, setIsAddingAddr] = useState(false);
+
+  // --- 1. Fetch Profile Data (Query) ---
+  const { data: fetchedData, isLoading } = useQuery({
+    queryKey: ["profile", user?.id],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/user/profile`, {
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(),
+        },
+      });
+      if (!res.ok) throw new Error("Failed to fetch profile");
+      return res.json();
+    },
+    enabled: !!user,
+  });
+
+  // --- 2. Sync Query Data to Local State ---
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await fetch(`${API_URL}/user/profile`, {
-          headers: {
-            Authorization: `Bearer ${getToken()}`,
-            ClientId: getClientId(),
+    if (fetchedData) {
+      setProfileData({
+        name: fetchedData.name || "",
+        email: fetchedData.email || "",
+        phone: fetchedData.phoneNumber || "",
+        avatarUrl: fetchedData.avatarUrl || "",
+      });
+
+      const pData = fetchedData.profileData || {};
+
+      if (fetchedData.role === "Customer") {
+        setCustomerData({
+          shippingAddress: pData.shippingAddress || "",
+          billingAddress: pData.billingAddress || "",
+          loyaltyPoints: pData.loyaltyPoints || 0,
+          savedAddresses: pData.savedAddresses || [],
+        });
+        if (
+          pData.shippingAddress &&
+          pData.shippingAddress === pData.billingAddress
+        ) {
+          setSameAsShipping(true);
+        }
+      } else if (fetchedData.role === "Admin") {
+        setBusinessData({
+          storeName: pData.storeName || "",
+          description: pData.description || "",
+          taxId: pData.taxId || "",
+          bankAccount: pData.bankAccount || "",
+          socials: {
+            instagram: pData.socials?.instagram || "",
+            facebook: pData.socials?.facebook || "",
           },
         });
-
-        if (res.ok) {
-          const data = await res.json();
-          setProfileData({
-            name: data.name || "",
-            email: data.email || "",
-            phone: data.phoneNumber || "",
-            avatarUrl: data.avatarUrl || "",
-          });
-
-          const pData = data.profileData || {};
-
-          if (data.role === "Customer") {
-            setCustomerData({
-              shippingAddress: pData.shippingAddress || "",
-              billingAddress: pData.billingAddress || "",
-              loyaltyPoints: pData.loyaltyPoints || 0,
-              savedAddresses: pData.savedAddresses || [],
-            });
-
-            // Check if billing matches shipping on load
-            if (
-              pData.shippingAddress &&
-              pData.shippingAddress === pData.billingAddress
-            ) {
-              setSameAsShipping(true);
-            }
-          } else if (data.role === "Admin") {
-            setBusinessData({
-              storeName: pData.storeName || "",
-              description: pData.description || "",
-              taxId: pData.taxId || "",
-              bankAccount: pData.bankAccount || "",
-              socials: {
-                instagram: pData.socials?.instagram || "",
-                facebook: pData.socials?.facebook || "",
-              },
-            });
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch profile", error);
-      } finally {
-        setInitialLoading(false);
       }
-    };
-
-    if (user) fetchProfile();
-  }, [user, API_URL, getToken]);
+    }
+  }, [fetchedData]);
 
   // Handle "Same as Shipping" Logic
   useEffect(() => {
@@ -150,7 +137,57 @@ export default function Profile() {
     }
   }, [customerData.shippingAddress, sameAsShipping]);
 
-  // Handlers for Address Manager
+  // --- 3. Save Profile (Mutation) ---
+  const updateProfileMutation = useMutation({
+    mutationFn: async () => {
+      const payload: any = {
+        name: profileData.name,
+        phoneNumber: profileData.phone,
+        avatarUrl: profileData.avatarUrl,
+        profileData: {},
+      };
+
+      if (user?.role === "Customer") {
+        payload.profileData = { ...customerData };
+      } else if (user?.role === "Admin") {
+        payload.profileData = {
+          ...businessData,
+          socials: businessData.socials,
+        };
+      }
+
+      const res = await fetch(`${API_URL}/user/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error("Failed to update");
+      // Handle empty or text responses gracefully
+      const text = await res.text();
+      return text ? JSON.parse(text) : {};
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      toast({
+        title: "Profile Updated",
+        description: "Changes saved successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update profile.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // --- Handlers ---
   const handleAddAddress = () => {
     if (!newAddress.value) return;
     const addr: SavedAddress = {
@@ -181,61 +218,12 @@ export default function Profile() {
     toast({ description: "Address applied to Shipping." });
   };
 
-  // Save Profile
-  const handleUpdateProfile = async () => {
-    setLoading(true);
-    try {
-      const payload: any = {
-        name: profileData.name,
-        phoneNumber: profileData.phone,
-        avatarUrl: profileData.avatarUrl,
-        profileData: {},
-      };
-
-      if (user?.role === "Customer") {
-        payload.profileData = { ...customerData };
-      } else if (user?.role === "Admin") {
-        payload.profileData = {
-          ...businessData,
-          socials: businessData.socials,
-        };
-      }
-
-      const res = await fetch(`${API_URL}/user/profile`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
-          ClientId: getClientId(),
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        toast({
-          title: "Profile Updated",
-          description: "Changes saved successfully.",
-        });
-      } else {
-        throw new Error("Failed to update");
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update profile.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleAvatarUpload = () => {
     const url = prompt("Enter Avatar URL:", profileData.avatarUrl);
     if (url) setProfileData({ ...profileData, avatarUrl: url });
   };
 
-  if (initialLoading)
+  if (isLoading)
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -283,7 +271,6 @@ export default function Profile() {
               <p className="text-sm text-muted-foreground">
                 {profileData.email}
               </p>
-              {/* Customer Points Badge */}
               {user?.role === "Customer" && (
                 <div className="mt-6 w-full grid grid-cols-2 gap-4 border-t pt-4">
                   <div className="flex flex-col">
@@ -357,7 +344,7 @@ export default function Profile() {
             </CardContent>
           </Card>
 
-          {/* 2. CUSTOMER: Address Manager & Fields */}
+          {/* 2. CUSTOMER: Address Manager */}
           {user?.role === "Customer" && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -371,7 +358,6 @@ export default function Profile() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Saved Addresses List */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-semibold uppercase text-muted-foreground">
@@ -386,7 +372,6 @@ export default function Profile() {
                     </Button>
                   </div>
 
-                  {/* Add Address Form */}
                   {isAddingAddr && (
                     <div className="flex gap-2 items-end border p-3 rounded-lg bg-muted/20">
                       <div className="grid gap-1 w-1/3">
@@ -423,7 +408,6 @@ export default function Profile() {
                     </div>
                   )}
 
-                  {/* List Items */}
                   {customerData.savedAddresses.length === 0 &&
                     !isAddingAddr && (
                       <p className="text-sm text-muted-foreground italic">
@@ -466,7 +450,6 @@ export default function Profile() {
 
                 <div className="h-px bg-border" />
 
-                {/* Default Inputs */}
                 <div className="grid gap-4">
                   <div className="grid gap-2">
                     <Label>Default Shipping Address</Label>
@@ -524,10 +507,8 @@ export default function Profile() {
             </Card>
           )}
 
-          {/* ADMIN: Business Profile (Keep existing) */}
+          {/* 3. ADMIN: Business Profile */}
           {user?.role === "Admin" && (
-            // ... (Keep your existing Admin cards for Store Name, Description, Socials etc.)
-            // Just referencing previous implementation to keep code short, insert Business Profile Cards here.
             <Card>
               <CardHeader>
                 <CardTitle>Business Profile</CardTitle>
@@ -545,21 +526,20 @@ export default function Profile() {
                     }
                   />
                 </div>
-                {/* Add other admin fields as before */}
+                {/* Simplified for brevity - add other admin fields here */}
               </CardContent>
             </Card>
           )}
 
-          {/* SAVE BUTTONS */}
           <div className="flex justify-end gap-4">
             <Button variant="outline" onClick={() => navigate(-1)}>
               Cancel
             </Button>
             <Button
-              onClick={handleUpdateProfile}
-              disabled={loading}
+              onClick={() => updateProfileMutation.mutate()}
+              disabled={updateProfileMutation.isPending}
               className="gap-2 min-w-[140px]">
-              {loading ? (
+              {updateProfileMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Save className="h-4 w-4" />

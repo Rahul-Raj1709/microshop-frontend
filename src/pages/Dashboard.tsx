@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { DataTable } from "@/components/dashboard/DataTable";
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import { getClientId } from "@/lib/clientId";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
 interface TopProductAPI {
   name: string;
@@ -50,42 +50,39 @@ const salesData = [
 
 export default function Dashboard() {
   const { user, getToken, API_URL } = useAuth();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate(); // [!code ++]
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const token = getToken();
-        const response = await fetch(`${API_URL}/dashboard`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-            ClientId: getClientId(),
-          },
-        });
+  // --- TanStack Query Fetcher ---
+  const {
+    data: stats,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["dashboard", user?.id], // Cache key unique to this user
+    queryFn: async () => {
+      const token = getToken();
+      const response = await fetch(`${API_URL}/dashboard`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          ClientId: getClientId(),
+        },
+      });
 
-        if (response.status === 429) {
-          navigate("/too-many-requests");
-          return;
-        }
-
-        if (response.ok) {
-          const data = await response.json();
-          setStats(data);
-        } else {
-          console.error("Failed to fetch dashboard stats");
-        }
-      } catch (error) {
-        console.error("Error fetching dashboard:", error);
-      } finally {
-        setLoading(false);
+      if (response.status === 429) {
+        navigate("/too-many-requests");
+        throw new Error("Too many requests");
       }
-    };
 
-    fetchDashboardData();
-  }, [API_URL, getToken, navigate]);
+      if (!response.ok) {
+        throw new Error("Failed to fetch dashboard stats");
+      }
+
+      return response.json() as Promise<DashboardStats>;
+    },
+    enabled: !!user, // Only fetch if user is logged in
+    staleTime: 1000 * 60 * 5, // Cache data for 5 minutes
+  });
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -114,8 +111,14 @@ export default function Dashboard() {
       id: i,
     })) || [];
 
-  if (loading) {
+  if (isLoading) {
     return <div className="p-8">Loading dashboard...</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="p-8 text-destructive">Failed to load dashboard data.</div>
+    );
   }
 
   return (
