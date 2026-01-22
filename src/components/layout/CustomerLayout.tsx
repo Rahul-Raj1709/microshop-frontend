@@ -19,7 +19,8 @@ import {
   Moon,
   Package,
   Menu,
-  Settings, // [!code ++] Added Settings Icon
+  Settings,
+  Heart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -40,7 +41,7 @@ export function CustomerLayout() {
         to="/"
         className={cn(
           "text-sm font-medium transition-colors hover:text-primary",
-          location.pathname === "/" ? "text-primary" : "text-muted-foreground"
+          location.pathname === "/" ? "text-primary" : "text-muted-foreground",
         )}>
         Products
       </Link>
@@ -52,7 +53,7 @@ export function CustomerLayout() {
               "text-sm font-medium transition-colors hover:text-primary",
               location.pathname === "/orders"
                 ? "text-primary"
-                : "text-muted-foreground"
+                : "text-muted-foreground",
             )}>
             Orders
           </Link>
@@ -62,7 +63,7 @@ export function CustomerLayout() {
               "relative text-sm font-medium transition-colors hover:text-primary",
               location.pathname === "/cart"
                 ? "text-primary"
-                : "text-muted-foreground"
+                : "text-muted-foreground",
             )}>
             <ShoppingCart className="h-5 w-5" />
             {cartCount > 0 && (
@@ -126,6 +127,13 @@ export function CustomerLayout() {
                     <User className="mr-2 h-4 w-4" />
                     Profile
                   </DropdownMenuItem>
+                  {/* [!code ++] ADD WISHLIST HERE */}
+                  {!isManager && (
+                    <DropdownMenuItem onClick={() => navigate("/wishlist")}>
+                      <Heart className="mr-2 h-4 w-4" />
+                      My Wishlist
+                    </DropdownMenuItem>
+                  )}
                   {/* [!code ++] Added Settings Item */}
                   <DropdownMenuItem onClick={() => navigate("/settings")}>
                     <Settings className="mr-2 h-4 w-4" />
@@ -185,7 +193,7 @@ export function CustomerLayout() {
               to="/"
               className={cn(
                 "flex flex-col items-center gap-1",
-                location.pathname === "/" && "text-primary"
+                location.pathname === "/" && "text-primary",
               )}>
               <Store className="h-5 w-5" />
               <span className="text-xs">Shop</span>
@@ -194,7 +202,7 @@ export function CustomerLayout() {
               to="/orders"
               className={cn(
                 "flex flex-col items-center gap-1",
-                location.pathname === "/orders" && "text-primary"
+                location.pathname === "/orders" && "text-primary",
               )}>
               <Package className="h-5 w-5" />
               <span className="text-xs">Orders</span>
@@ -203,7 +211,7 @@ export function CustomerLayout() {
               to="/cart"
               className={cn(
                 "relative flex flex-col items-center gap-1",
-                location.pathname === "/cart" && "text-primary"
+                location.pathname === "/cart" && "text-primary",
               )}>
               <ShoppingCart className="h-5 w-5" />
               <span className="text-xs">Cart</span>
@@ -217,7 +225,7 @@ export function CustomerLayout() {
               to="/profile"
               className={cn(
                 "flex flex-col items-center gap-1",
-                location.pathname === "/profile" && "text-primary"
+                location.pathname === "/profile" && "text-primary",
               )}>
               <User className="h-5 w-5" />
               <span className="text-xs">Profile</span>

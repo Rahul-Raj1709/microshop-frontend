@@ -33,12 +33,17 @@ import {
   User,
   Mail,
   Store,
+  Heart, // [!code ++] Added Heart icon
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { getClientId } from "@/lib/clientId";
 import { useNavigate } from "react-router-dom";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import {
+  useQuery,
+  keepPreviousData,
+  useQueryClient,
+} from "@tanstack/react-query"; // [!code ++] Added useQueryClient
 
 // --- 1. Define Random Image List ---
 const PLACEHOLDER_IMAGES = [
@@ -96,13 +101,14 @@ export default function Products() {
 
   // Modal State
   const [selectedProduct, setSelectedProduct] = useState<ProductDetail | null>(
-    null
+    null,
   );
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   const { user, getToken, API_URL } = useAuth();
   const { refreshCart } = useCart();
   const navigate = useNavigate();
+  const queryClient = useQueryClient(); // [!code ++]
 
   // Debounce effect
   useEffect(() => {
@@ -131,7 +137,7 @@ export default function Products() {
       let url = "";
       if (debouncedSearch.length > 0) {
         url = `${API_URL}/product/search?q=${encodeURIComponent(
-          debouncedSearch
+          debouncedSearch,
         )}`;
       } else {
         url = `${API_URL}/product?page=${page}&pageSize=9`;
@@ -167,19 +173,90 @@ export default function Products() {
 
       return { items: mappedItems, totalPages };
     },
-    placeholderData: keepPreviousData, // Keeps old data visible while new data loads
+    placeholderData: keepPreviousData,
     staleTime: 1000 * 60, // 1 minute
   });
 
   const products = productData?.items || [];
   const totalPages = productData?.totalPages || 1;
 
+  // --- [!code ++] TanStack Query: Fetch Wishlist IDs ---
+  // This helps us know which heart icons should be filled
+  const { data: wishlistIds } = useQuery({
+    queryKey: ["wishlist-ids", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const res = await fetch(`${API_URL}/wishlist`, {
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(),
+        },
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      // We only need the IDs to check inclusion
+      return data.map((item: any) => item.id) as number[];
+    },
+    enabled: !!user, // Only run if logged in
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  // --- [!code ++] Toggle Wishlist Handler ---
+  const toggleWishlist = async (e: React.MouseEvent, productId: number) => {
+    e.stopPropagation(); // Prevent opening the details modal
+
+    if (!user) {
+      toast({
+        title: "Login required",
+        description: "Please login to save items to your wishlist.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const isLiked = wishlistIds?.includes(productId);
+
+    // Optimistic Update (optional, but good for UX) or simpler: Invalidate
+    const method = isLiked ? "DELETE" : "POST";
+    const url = isLiked
+      ? `${API_URL}/wishlist/${productId}`
+      : `${API_URL}/wishlist`;
+    const body = isLiked ? undefined : JSON.stringify({ productId });
+
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+          ClientId: getClientId(),
+        },
+        body,
+      });
+
+      if (res.ok) {
+        // Refresh the wishlist IDs so the UI updates
+        queryClient.invalidateQueries({ queryKey: ["wishlist-ids"] });
+
+        toast({
+          title: isLiked ? "Removed" : "Saved",
+          description: isLiked ? "Removed from wishlist" : "Added to wishlist",
+        });
+      } else {
+        throw new Error("Action failed");
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Could not update wishlist.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // --- Fetch Full Details (On demand) ---
   const handleProductClick = async (productId: number) => {
     try {
-      // You could also convert this to a useQuery with `enabled: false`
-      // or a separate query that triggers on modal open,
-      // but simple fetch is okay for on-click events.
       const res = await fetch(`${API_URL}/product/${productId}`, {
         headers: {
           "Content-Type": "application/json",
@@ -333,6 +410,21 @@ export default function Products() {
                             {product.category}
                           </Badge>
                         )}
+
+                        {/* [!code ++] Heart Button */}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="absolute right-2 top-2 h-8 w-8 bg-background/80 hover:bg-background/100 rounded-full shadow-sm z-10 "
+                          onClick={(e) => toggleWishlist(e, product.id)}>
+                          <Heart
+                            className={`h-5 w-5 transition-colors ${
+                              wishlistIds?.includes(product.id)
+                                ? "fill-red-500 text-red-500"
+                                : "text-gray-500"
+                            }`}
+                          />
+                        </Button>
                       </div>
                       <CardContent className="p-4 flex-1">
                         <h3 className="text-lg font-semibold line-clamp-1">

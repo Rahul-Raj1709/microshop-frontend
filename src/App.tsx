@@ -23,6 +23,7 @@ import NotFound from "@/pages/NotFound";
 import TooManyRequests from "@/pages/TooManyRequests";
 import Profile from "@/pages/Profile";
 import Settings from "@/pages/Settings"; // [!code ++]
+import Wishlist from "./pages/Wishlist";
 
 const queryClient = new QueryClient();
 
@@ -64,8 +65,7 @@ const App = () => (
                   <Route path="/" element={<Products />} />
                   <Route path="/cart" element={<Cart />} />
                   <Route path="/orders" element={<Orders />} />
-
-                  {/* [!code ++] Customer Settings */}
+                  <Route path="/wishlist" element={<Wishlist />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/settings" element={<Settings />} />
                 </Route>
