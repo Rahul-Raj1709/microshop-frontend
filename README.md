@@ -1,73 +1,87 @@
-# Welcome to your Lovable project
+# 🛍️ MicroShop Frontend
 
-## Project info
+![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
+![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
+![TanStack Query](https://img.shields.io/badge/-TanStack%20Query-FF4154?style=for-the-badge&logo=react-query&logoColor=white)
+![TailwindCSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)
+![Shadcn/UI](https://img.shields.io/badge/shadcn%2Fui-000000?style=for-the-badge&logo=shadcnui&logoColor=white)
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+A modern, responsive e-commerce storefront and admin dashboard built with **React**, **TypeScript**, and **Vite**. This project leverages **TanStack Query** for robust server-state management and features a sleek UI designed with **Shadcn UI**.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## ✨ Key Features
 
-**Use Lovable**
+### ⚡ Performance & State
+* **Efficient Data Fetching**: Utilizes **TanStack Query (v5)** for caching, synchronization, and background updates, ensuring the UI is always in sync with the backend.
+* **Global State Management**: React Context API handles client-side state for Authentication, Shopping Cart, and Theme preferences.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### 🛒 Customer Experience
+* **Product Catalog**: Browse and filter products with an intuitive grid layout.
+* **Shopping Cart**: Persistent cart functionality with real-time updates.
+* **Wishlist**: Save favorite items for later access.
+* **User Profiles**: Manage account details and view order history.
 
-Changes made via Lovable will be committed automatically to this repo.
+### 📊 Admin Dashboard
+* **Visual Analytics**: Interactive charts and metric cards powered by **Recharts** to track sales and performance.
+* **Inventory Control**: Full CRUD operations for product management.
+* **Order Supervision**: Detailed table views for monitoring customer orders.
 
-**Use your preferred IDE**
+---
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## 🛠️ Tech Stack
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+* **Core**: [React 18](https://react.dev/) + [Vite](https://vitejs.dev/)
+* **Language**: [TypeScript](https://www.typescriptlang.org/)
+* **Server State / Fetching**: [TanStack Query](https://tanstack.com/query/latest) (@tanstack/react-query)
+* **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+* **UI Components**: [Shadcn UI](https://ui.shadcn.com/) + Radix UI Primitives
+* **Client State**: React Context (Auth, Cart, Theme)
+* **Forms & Validation**: React Hook Form + Zod
+* **Visualization**: Recharts
+* **Icons**: Lucide React
 
-Follow these steps:
+---
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+## 🚀 Getting Started
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+Follow these steps to run the project locally.
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Prerequisites
+* Node.js (v18 or higher)
+* npm or yarn
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+### Installation
 
-**Edit a file directly in GitHub**
+1.  **Clone the repository**
+    ```bash
+    git clone [https://github.com/rahul-raj1709/microshop-frontend.git](https://github.com/rahul-raj1709/microshop-frontend.git)
+    cd microshop-frontend
+    ```
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+2.  **Install Dependencies**
+    ```bash
+    npm install
+    ```
 
-**Use GitHub Codespaces**
+3.  **Run Development Server**
+    ```bash
+    npm run dev
+    ```
+    The application will be available at `http://localhost:8080` (or the port specified in your console).
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+---
 
-## What technologies are used for this project?
+## 📂 Project Structure
 
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```text
+src/
+├── components/
+│   ├── dashboard/   # Analytics charts and metric cards
+│   ├── layout/      # Customer and Admin layouts
+│   └── ui/          # Reusable Shadcn UI components
+├── context/         # Global client state (Auth, Cart)
+├── hooks/           # Custom hooks (e.g., use-toast)
+├── pages/           # Application views (Products, Dashboard, etc.)
+└── lib/             # Utilities and helper functions
