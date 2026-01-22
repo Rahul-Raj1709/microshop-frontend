@@ -105,7 +105,8 @@ export function CustomerLayout() {
               onClick={() =>
                 setTheme(resolvedTheme === "dark" ? "light" : "dark")
               }
-              className="h-9 w-9">
+              className="h-9 w-9"
+              aria-label="Toggle theme">
               {resolvedTheme === "dark" ? (
                 <Sun className="h-4 w-4" />
               ) : (
@@ -167,7 +168,8 @@ export function CustomerLayout() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 md:hidden">
+                  className="h-9 w-9 md:hidden"
+                  aria-label="Open menu">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
@@ -209,9 +211,12 @@ export function CustomerLayout() {
             </Link>
             <Link
               to="/cart"
+              aria-label="Shopping Cart" // [!code ++] Add this
               className={cn(
-                "relative flex flex-col items-center gap-1",
-                location.pathname === "/cart" && "text-primary",
+                "relative text-sm font-medium transition-colors hover:text-primary",
+                location.pathname === "/cart"
+                  ? "text-primary"
+                  : "text-muted-foreground",
               )}>
               <ShoppingCart className="h-5 w-5" />
               <span className="text-xs">Cart</span>
@@ -220,7 +225,7 @@ export function CustomerLayout() {
                   {cartCount}
                 </Badge>
               )}
-            </Link>
+            </Link>{" "}
             <Link
               to="/profile"
               className={cn(

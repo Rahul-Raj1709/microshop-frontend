@@ -33,7 +33,7 @@ import {
   User,
   Mail,
   Store,
-  Heart, // [!code ++] Added Heart icon
+  Heart,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
@@ -43,22 +43,21 @@ import {
   useQuery,
   keepPreviousData,
   useQueryClient,
-} from "@tanstack/react-query"; // [!code ++] Added useQueryClient
+} from "@tanstack/react-query";
 
 // --- 1. Define Random Image List ---
 const PLACEHOLDER_IMAGES = [
-  "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=500&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=500&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=500&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1618424181497-157f25b6ddd5?w=500&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1593642632823-8f78536788c6?w=500&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500&h=400&fit=crop",
-  "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=500&h=400&fit=crop",
+  "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=400&fit=crop&fm=webp",
+  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&h=400&fit=crop&fm=webp",
+  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500&h=400&fit=crop&fm=webp",
+  "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&h=400&fit=crop&fm=webp",
+  "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=500&h=400&fit=crop&fm=webp",
+  "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=500&h=400&fit=crop&fm=webp",
+  "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&h=400&fit=crop&fm=webp",
+  "https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=500&h=400&fit=crop&fm=webp",
+  "https://images.unsplash.com/photo-1618424181497-157f25b6ddd5?w=500&h=400&fit=crop&fm=webp",
+  "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500&h=400&fit=crop&fm=webp",
+  "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=500&h=400&fit=crop&fm=webp",
 ];
 
 const getProductImage = (id: number, existingImage?: string) => {
@@ -108,7 +107,7 @@ export default function Products() {
   const { user, getToken, API_URL } = useAuth();
   const { refreshCart } = useCart();
   const navigate = useNavigate();
-  const queryClient = useQueryClient(); // [!code ++]
+  const queryClient = useQueryClient();
 
   // Debounce effect
   useEffect(() => {
@@ -180,7 +179,7 @@ export default function Products() {
   const products = productData?.items || [];
   const totalPages = productData?.totalPages || 1;
 
-  // --- [!code ++] TanStack Query: Fetch Wishlist IDs ---
+  // --- TanStack Query: Fetch Wishlist IDs ---
   // This helps us know which heart icons should be filled
   const { data: wishlistIds } = useQuery({
     queryKey: ["wishlist-ids", user?.id],
@@ -201,7 +200,7 @@ export default function Products() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  // --- [!code ++] Toggle Wishlist Handler ---
+  // --- Toggle Wishlist Handler ---
   const toggleWishlist = async (e: React.MouseEvent, productId: number) => {
     e.stopPropagation(); // Prevent opening the details modal
 
@@ -394,7 +393,7 @@ export default function Products() {
                 </div>
               ) : (
                 <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {products.map((product) => (
+                  {products.map((product, index) => (
                     <Card
                       key={product.id}
                       className="group overflow-hidden hover:shadow-lg flex flex-col cursor-pointer transition-all hover:border-primary/50"
@@ -403,20 +402,29 @@ export default function Products() {
                         <img
                           src={product.image}
                           alt={product.name}
+                          loading={index < 4 ? "eager" : "lazy"}
+                          // @ts-ignore
+                          fetchpriority={index === 0 ? "high" : "auto"}
+                          width="500"
+                          height="400"
                           className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                        />
+                        />{" "}
                         {product.category && (
                           <Badge className="absolute left-3 top-3">
                             {product.category}
                           </Badge>
                         )}
-
-                        {/* [!code ++] Heart Button */}
+                        {/* Heart Button */}
                         <Button
                           size="icon"
                           variant="ghost"
                           className="absolute right-2 top-2 h-8 w-8 bg-background/80 hover:bg-background/100 rounded-full shadow-sm z-10 "
-                          onClick={(e) => toggleWishlist(e, product.id)}>
+                          onClick={(e) => toggleWishlist(e, product.id)}
+                          aria-label={
+                            wishlistIds?.includes(product.id)
+                              ? "Remove from wishlist"
+                              : "Add to wishlist"
+                          }>
                           <Heart
                             className={`h-5 w-5 transition-colors ${
                               wishlistIds?.includes(product.id)
@@ -427,9 +435,9 @@ export default function Products() {
                         </Button>
                       </div>
                       <CardContent className="p-4 flex-1">
-                        <h3 className="text-lg font-semibold line-clamp-1">
+                        <h2 className="text-lg font-semibold line-clamp-1">
                           {product.name}
-                        </h3>
+                        </h2>
                         <p className="text-xs text-muted-foreground mb-2 line-clamp-2 h-8">
                           {product.description || "No description available."}
                         </p>
